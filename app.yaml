@@ -1,0 +1,28 @@
+server:
+  host: "127.0.0.1" #the IP address the server will listen on (here, localhost).
+  port: 8080        #the port number the server will use to accept connections.
+                    #together they tell your app where it should run and accept requests.
+
+environment: "development"
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "postgres"
+  password: "9539Abdu"
+  dbname: "Backend"
+  sslmode: "disable"
+
+jwt:
+  access_secret: "Accesssecretjwtkey"
+  refresh_secret: "Refreshsecretjwtkey"
+  access_expiry: 900 # 15min
+  refresh_expiry: 604800 # 7 days
+
+
+smtp:
+  host: smtp.gmail.com
+  port: 587
+  username : abdumanaam01@gmail.com
+  password: jldwjdvvglvutufy
+  from: "YUMZY <abdumanaam01@gmail.com>"
