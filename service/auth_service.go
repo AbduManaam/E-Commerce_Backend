@@ -99,7 +99,7 @@ func (s *AuthService) VerifyOTP(userEmail, otpCode string) error {
 	user, err := s.userRepo.GetByEmail(userEmail)
 	if err != nil {
 		s.logger.Println("[VerifyOTP] DB error fetching user:", err)
-		return err // ❗ do NOT lie about DB errors
+		return err 
 	}	
 
 	if user == nil {

@@ -24,7 +24,8 @@ func (h *CartHandler) Add(c *fiber.Ctx) error {
 	}
 
 	if err := h.svc.AddItem(userID, req.ProductID, req.Quantity); err != nil {
-		return err
+		return HandleError(c, err)
+
 	}
 
 	return c.SendStatus(fiber.StatusCreated)
@@ -34,7 +35,7 @@ func (h *CartHandler) Get(c *fiber.Ctx) error {
 	userID := c.Locals("userID").(uint)
 	cart, err := h.svc.GetCart(userID)
 	if err != nil {
-		return err
+		return HandleError(c, err)
 	}
 	return c.JSON(cart)
 }

@@ -1,8 +1,10 @@
-
 package handler
 
 import (
+	"backend/handler/dto"
 	"backend/service"
+	validator "backend/utils/validation"
+
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -16,24 +18,46 @@ func NewWishlistHandler(svc *service.WishlistService) *WishlistHandler {
 
 // Add product to wishlist
 func (h *WishlistHandler) Add(c *fiber.Ctx) error {
-	var req struct {
-		ProductID uint `json:"productID"`
-	}
+    userID := c.Locals("userID").(uint)
 
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid JSON"})
-	}
+    var req dto.WishlistRequest
+    if err := c.BodyParser(&req); err != nil {
+        return HandleError(c, service.ErrInvalidInput)
+    }
 
-	if req.ProductID == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "productID is required"})
-	}
+    if err := validator.Validate.Struct(req); err != nil {
+        return c.Status(400).JSON(fiber.Map{
+            "errors": validator.FormatErrors(err),
+        })
+    }
 
-	if err := h.wishlistSvc.Add( /* get userID from context */ c.Locals("userID").(uint), req.ProductID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-	}
+    if err := h.wishlistSvc.Add(userID, req.ProductID); err != nil {
+        return HandleError(c, err)
+    }
 
-	return c.JSON(fiber.Map{"message": "product added to wishlist"})
+    return c.JSON(fiber.Map{"message": "product added to wishlist"})
 }
+
+
+// func (h *WishlistHandler) Add(c *fiber.Ctx) error {
+// 	var req struct {
+// 		ProductID uint `json:"productID"`
+// 	}
+
+// 	if err := c.BodyParser(&req); err != nil {
+// 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid JSON"})
+// 	}
+
+// 	if req.ProductID == 0 {
+// 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "productID is required"})
+// 	}
+
+// 	if err := h.wishlistSvc.Add( /* get userID from context */ c.Locals("userID").(uint), req.ProductID); err != nil {
+// 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+// 	}
+
+// 	return c.JSON(fiber.Map{"message": "product added to wishlist"})
+// }
 
 // Get wishlist
 func (h *WishlistHandler) Get(c *fiber.Ctx) error {

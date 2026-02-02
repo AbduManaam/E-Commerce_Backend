@@ -35,7 +35,6 @@ type Order struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
-
 type OrderItem struct {
 	ID        uint    `gorm:"primaryKey;autoIncrement"`
 	OrderID  uint    `gorm:"not null;index"`
