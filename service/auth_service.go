@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"time"
+	"strings"
 
 	"backend/config"
 	"backend/internal/domain"
@@ -370,15 +371,59 @@ func (s *AuthService) ChangePassword(
 
 
 //  basic email format validation
+// func isValidEmail(email string) bool {
+// 	if len(email) < 5 || !contains(email, "@") {
+// 		return false
+// 	}
+// 	return true
+// }
+// func contains(s, sub string) bool { return len(s) >= len(sub) && (s[0:len(sub)] == sub || contains(s[1:], sub)) }
+
+
+ 
+
+
 func isValidEmail(email string) bool {
-	if len(email) < 5 || !contains(email, "@") {
+	if len(email) < 6 {
 		return false
 	}
+
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return false
+	}
+
+	local := parts[0]
+	domain := parts[1]
+
+	if local == "" || domain == "" {
+		return false
+	}
+
+	if !strings.Contains(domain, ".") {
+		return false
+	}
+
+	domainParts := strings.Split(domain, ".")
+	tld := domainParts[len(domainParts)-1]
+
+	if len(tld) < 2 {
+		return false
+	}
+
+	blockedDomains := map[string]bool{
+		"gmail.cm":  true,
+		"gamil.com": true,
+		"gmial.com": true,
+		"gmial.om": true,
+	}
+
+	if blockedDomains[domain] {
+		return false
+	}
+
 	return true
 }
-func contains(s, sub string) bool { return len(s) >= len(sub) && (s[0:len(sub)] == sub || contains(s[1:], sub)) }
-
-
 
 
 
@@ -416,10 +461,3 @@ otpHash, _ := otp.HashOTP(otpCode)
 
 	return nil
 }
-
-// // Generate OTP helper function
-// func generateOTP() string {
-// 	// Simple 6-digit OTP generation
-// 	// In production, use crypto/rand for better security
-// 	return fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
-// }

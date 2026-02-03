@@ -223,7 +223,7 @@ func (h *AuthHandler) VerifyOTP(c *fiber.Ctx) error {
 //ResetPasswordWithOTP
 func (h *AuthHandler) ResetPasswordWithOTP(c *fiber.Ctx) error {
 	var req struct {
-		Email       string `json:"email" validate:"required, email"`
+		Email       string `json:"email" validate:"required,email"`
 		OTP         string `json:"otp"  validate:"required,len=6"`
 		NewPassword string `json:"new_password" validate:"required,min=6"`
 	}
@@ -247,6 +247,33 @@ func (h *AuthHandler) ResetPasswordWithOTP(c *fiber.Ctx) error {
 
 	logging.LogInfo("password reset successfully via OTP", c, "email", req.Email)
 	return c.JSON(fiber.Map{"message": "Password reset successfully"})
+}
+
+//ResendVerification
+func (h *AuthHandler) ResendVerification(c *fiber.Ctx) error {
+    type request struct {
+        Email string `json:"email"`
+    }
+
+    var body request
+    if err := c.BodyParser(&body); err != nil {
+        return fiber.ErrBadRequest
+    }
+
+    err := h.authSvc.ResendVerificationEmail(body.Email)
+    if err != nil {
+        if se, ok := err.(*service.ServiceError); ok {
+            return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+                "code": se.Code,
+                "msg":  se.Msg,
+            })
+        }
+        return fiber.ErrInternalServerError
+    }
+
+    return c.JSON(fiber.Map{
+        "msg": "Verification OTP resent successfully",
+    })
 }
 
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
