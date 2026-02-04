@@ -8,21 +8,28 @@ import (
 	"backend/service"
 	"backend/utils/databases"
 	"backend/utils/email"
+	"backend/utils/logging"
+	"log"
+	"os"
 )
 
 type Container struct {
-	UserHandler    *handler.UserHandler
-	AdminHandler   *handler.AdminUserHandler
-	AuthHandler    *handler.AuthHandler
-	ProductHandler *handler.ProductHandler
-	OrderHandler   *handler.OrderHandler
-    CartHandler     *handler.CartHandler
+	UserHandler     *handler.UserHandler
+	AdminHandler    *handler.AdminUserHandler
+	AuthHandler     *handler.AuthHandler
+	ProductHandler  *handler.ProductHandler
+	OrderHandler    *handler.OrderHandler
+	CartHandler     *handler.CartHandler
 	WishlistHandler *handler.WishlistHandler
 
 	DBCleanup func() error
 }
 
 func BuildContainer(cfg *config.AppConfig) (*Container, error) {
+
+	logging.Init(cfg.Environment)
+	logger := logging.Logger
+
 	db := databases.NewPostgresDB(
 		cfg.Database.Host,
 		cfg.Database.User,
@@ -38,51 +45,58 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	}
 
 	databases.AutoMigrate(db)
-	
-	// repositories
-	userRepo := repository.NewUserRepository(db)
-	productRepo := repository.NewProductRepository(db)
-	orderRepo := repository.NewOrderRepository(db)
-	cartRepo := repository.NewCartRepository(db)
-    wishlistRepo := repository.NewWishlistRepository(db)
+	repoLogger := log.New(os.Stdout, "[SERVICE] ", log.LstdFlags|log.Lshortfile)
 
-	// Initialize email package with config
+
+	authRepo := repository.NewAuthRepository(db)
+	userRepo := repository.NewUserRepository(db, logger)
+	productRepo := repository.NewProductRepository(db, logger)
+	orderRepo := repository.NewOrderRepository(db, logger)
+	cartRepo := repository.NewCartRepository(db, logger)
+	wishlistRepo := repository.NewWishlistRepository(db, logger)
+
+	// Email
 	email.Init(cfg.SMTP)
 	emailSvc := email.NewSMTPService()
 
+	// Services
 	authSvc := service.NewAuthService(
-	userRepo,
-	&cfg.JWT,
-	emailSvc,
-)
-	// services 
-	userSvc := service.NewUserService(userRepo)
-	productSvc := service.NewProductService(productRepo)
+		userRepo,
+		authRepo,
+		&cfg.JWT,
+		emailSvc,
+	)
+
+	userSvc := service.NewUserService(userRepo,logger)
+	productSvc := service.NewProductService(productRepo,logger)
+
 	orderSvc := service.NewOrderService(
 		orderRepo,
 		productRepo,
+		repoLogger,
 	)
+
 	cartSvc := service.NewCartService(
-	cartRepo,
-	productRepo,
-    )
+		cartRepo,
+		productRepo,
+		repoLogger,
+	)
 
-    wishlistSvc := service.NewWishlistService(
-	wishlistRepo,
-	productRepo,
-    )
-	cartHandler := handler.NewCartHandler(cartSvc)
-    wishlistHandler := handler.NewWishlistHandler(wishlistSvc)
+	wishlistSvc := service.NewWishlistService(
+		wishlistRepo,
+		productRepo,
+		repoLogger,
+	)
 
-	// handlers
+	// Handlers
 	return &Container{
-		AuthHandler:    handler.NewAuthHandler(authSvc),
-		AdminHandler:   handler.NewAdminUserHandler(userSvc),
-		UserHandler:    handler.NewUserHandler(userSvc),
-		ProductHandler: handler.NewProductHandler(productSvc),
-		OrderHandler:   handler.NewOrderHandler(orderSvc),
-		CartHandler:     cartHandler,
-	    WishlistHandler: wishlistHandler,
-		DBCleanup:      sqlDB.Close,
+		AuthHandler:     handler.NewAuthHandler(authSvc),
+		AdminHandler:    handler.NewAdminUserHandler(userSvc),
+		UserHandler:     handler.NewUserHandler(userSvc),
+		ProductHandler:  handler.NewProductHandler(productSvc),
+		OrderHandler:    handler.NewOrderHandler(orderSvc),
+		CartHandler:     handler.NewCartHandler(cartSvc),
+		WishlistHandler: handler.NewWishlistHandler(wishlistSvc),
+		DBCleanup:       sqlDB.Close,
 	}, nil
 }

@@ -4,31 +4,51 @@ import (
 	"backend/handler/dto"
 	"backend/internal/domain"
 	"backend/repository"
+	"log/slog"
 )
+
 
 type ProductService struct {
 	productRepo repository.ProductRepository
+	logger      *slog.Logger
 }
 
-func NewProductService(productRepo repository.ProductRepository) *ProductService {
-	return &ProductService{productRepo: productRepo}
+func NewProductService(
+	productRepo repository.ProductRepository,
+	logger *slog.Logger,
+) *ProductService {
+	if logger == nil {
+		panic("ProductService requires a non-nil logger")
+	}
+
+	return &ProductService{
+		productRepo: productRepo,
+		logger:      logger,
+	}
 }
+
 
 func (s *ProductService) CreateProduct(req dto.CreateProductRequest) (*domain.Product, error) {
-
 	if req.Name == "" || len(req.Name) < 2 || len(req.Name) > 100 {
+		s.logger.Warn("CreateProduct failed: invalid name", "name", req.Name)
 		return nil, ErrInvalidInput
 	}
+
 	if req.Price <= 0 || req.Price > 1_000_000 {
+		s.logger.Warn("CreateProduct failed: invalid price", "price", req.Price)
 		return nil, ErrInvalidInput
 	}
+
 	if req.Stock < 0 {
+		s.logger.Warn("CreateProduct failed: invalid stock", "stock", req.Stock)
 		return nil, ErrInvalidInput
 	}
+
 	if len(req.Description) > 500 {
+		s.logger.Warn("CreateProduct failed: description too long")
 		return nil, ErrInvalidInput
 	}
-	
+
 	product := &domain.Product{
 		Name:        req.Name,
 		Description: req.Description,
@@ -38,36 +58,61 @@ func (s *ProductService) CreateProduct(req dto.CreateProductRequest) (*domain.Pr
 	}
 
 	if err := s.productRepo.Create(product); err != nil {
+		s.logger.Error(
+			"CreateProduct failed: db error",
+			"name", req.Name,
+			"err", err,
+		)
 		return nil, err
+	}
+
+	s.logger.Info("CreateProduct success", "product_id", product.ID)
+	return product, nil
+}
+
+
+func (s *ProductService) ListProducts() ([]*domain.Product, error) {
+	products, err := s.productRepo.List()
+	if err != nil {
+		s.logger.Error("ListProducts failed", "err", err)
+		return nil, err
+	}
+	return products, nil
+}
+
+func (s *ProductService) GetProduct(id uint) (*domain.Product, error) {
+	if id == 0 {
+		s.logger.Warn("GetProduct failed: invalid productID", "product_id", id)
+		return nil, ErrInvalidInput
+	}
+
+	product, err := s.productRepo.GetByID(id)
+	if err != nil || product == nil {
+		s.logger.Warn(
+			"GetProduct failed: product not found",
+			"product_id", id,
+			"err", err,
+		)
+		return nil, ErrNotFound
 	}
 
 	return product, nil
 }
 
-func (s *ProductService) ListProducts() ([]*domain.Product, error) {
-	return s.productRepo.List()
-}
 
-func(s *ProductService) GetProduct(id uint)(*domain.Product,error){
-
-	product,err:= s.productRepo.GetByID(id)
-	if err!=nil{
-		return nil,err
-	}
-	return product,nil
-}
-func (s *ProductService) UpdateProduct(
-	productID uint,
-	req dto.UpdateProductRequest,
-) error {
-
+func (s *ProductService) UpdateProduct(productID uint, req dto.UpdateProductRequest) error {
 	if productID == 0 {
+		s.logger.Warn("UpdateProduct failed: invalid productID", "product_id", productID)
 		return ErrInvalidInput
 	}
 
 	product, err := s.productRepo.GetByID(productID)
-	if err != nil {
-		return err
+	if err != nil || product == nil {
+		s.logger.Warn(
+			"UpdateProduct failed: product not found",
+			"product_id", productID,
+		)
+		return ErrNotFound
 	}
 
 	if req.Name != nil {
@@ -102,15 +147,39 @@ func (s *ProductService) UpdateProduct(
 		product.IsActive = *req.IsActive
 	}
 
-	return s.productRepo.Update(product)
+	if err := s.productRepo.Update(product); err != nil {
+		s.logger.Error(
+			"UpdateProduct failed: db error",
+			"product_id", productID,
+			"err", err,
+		)
+		return err
+	}
+
+	s.logger.Info("UpdateProduct success", "product_id", productID)
+	return nil
 }
-
-
 
 func (s *ProductService) DeleteProduct(productID uint) error {
 	if productID == 0 {
+		s.logger.Warn("DeleteProduct failed: invalid productID", "product_id", productID)
 		return ErrInvalidInput
 	}
 
-	return s.productRepo.Delete(productID)
+	product, err := s.productRepo.GetByID(productID)
+	if err != nil || product == nil {
+		return ErrNotFound
+	}
+
+	if err := s.productRepo.Delete(productID); err != nil {
+		s.logger.Error(
+			"DeleteProduct failed: db error",
+			"product_id", productID,
+			"err", err,
+		)
+		return err
+	}
+
+	s.logger.Info("DeleteProduct success", "product_id", productID)
+	return nil
 }

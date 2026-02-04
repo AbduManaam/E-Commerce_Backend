@@ -2,48 +2,115 @@ package repository
 
 import (
 	"backend/internal/domain"
+	"log/slog"
 
 	"gorm.io/gorm"
 )
 
-
-
-
 type productRepository struct {
-	db *gorm.DB
+	db     *gorm.DB
+	logger *slog.Logger
 }
 
-
-// func NewProductRepository(db *gorm.DB) ProductRepositoryInterface  {
-// 	var repo ProductRepository = &productRepository{db: db}
-// 	return repo
-// }
-
-func NewProductRepository(db *gorm.DB) ProductRepositoryInterface {
-	return &productRepository{db: db} 
+// Constructor
+func NewProductRepository(
+	db *gorm.DB,
+	logger *slog.Logger,
+) ProductRepositoryInterface {
+	return &productRepository{
+		db:     db,
+		logger: logger,
+	}
 }
 
+// -----------------------------------------------------
 
 func (r *productRepository) Create(p *domain.Product) error {
-	return r.db.Create(p).Error
+	err := r.db.Create(p).Error
+	if err != nil {
+		r.logger.Error(
+			"product create failed",
+			"name", p.Name,
+			"err", err,
+		)
+		return err
+	}
+
+	r.logger.Info(
+		"product created",
+		"product_id", p.ID,
+		"name", p.Name,
+	)
+	return nil
 }
 
 func (r *productRepository) GetByID(id uint) (*domain.Product, error) {
 	var product domain.Product
+
 	err := r.db.First(&product, id).Error
-	return &product, err
+	if err != nil {
+		r.logger.Error(
+			"product get by id failed",
+			"product_id", id,
+			"err", err,
+		)
+		return nil, err
+	}
+
+	return &product, nil
 }
 
 func (r *productRepository) List() ([]*domain.Product, error) {
 	var products []*domain.Product
+
 	err := r.db.Find(&products).Error
-	return products, err
+	if err != nil {
+		r.logger.Error(
+			"product list failed",
+			"err", err,
+		)
+		return nil, err
+	}
+
+	r.logger.Info(
+		"product list fetched",
+		"count", len(products),
+	)
+	return products, nil
 }
 
 func (r *productRepository) Update(p *domain.Product) error {
-	return r.db.Save(p).Error
+	err := r.db.Save(p).Error
+	if err != nil {
+		r.logger.Error(
+			"product update failed",
+			"product_id", p.ID,
+			"err", err,
+		)
+		return err
+	}
+
+	r.logger.Info(
+		"product updated",
+		"product_id", p.ID,
+	)
+	return nil
 }
 
 func (r *productRepository) Delete(id uint) error {
-	return r.db.Delete(&domain.Product{}, id).Error
+	err := r.db.Delete(&domain.Product{}, id).Error
+	if err != nil {
+		r.logger.Error(
+			"product delete failed",
+			"product_id", id,
+			"err", err,
+		)
+		return err
+	}
+
+	r.logger.Info(
+		"product deleted",
+		"product_id", id,
+	)
+	return nil
 }

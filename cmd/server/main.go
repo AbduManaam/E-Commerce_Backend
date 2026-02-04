@@ -5,6 +5,7 @@ import (
 	"backend/config"
 	"backend/utils/logging"
 	"os"
+
 )
 
 func main() {
@@ -15,6 +16,7 @@ func main() {
 	}
 
 	logging.Init(env)
+	
 
 	cfg, err := config.LoadConfig("app.yaml")
 	if err != nil {

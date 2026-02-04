@@ -4,16 +4,15 @@ import (
 	"backend/config"
 	"backend/middleware"
 	"backend/routes"
+	"backend/utils/logging"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 )
 
 type Server struct {
@@ -22,10 +21,11 @@ type Server struct {
 	cleanup func() error
 }
 
-func NewServer(cfg *config.AppConfig) (*Server, func()error) {
+func NewServer(cfg *config.AppConfig) (*Server, func() error) {
 	container, err := BuildContainer(cfg)
 	if err != nil {
-		log.Fatal(err)
+		logging.LogWarn("server container build failed", nil, err)
+		os.Exit(1)
 	}
 
 	app := fiber.New(fiber.Config{
@@ -38,7 +38,21 @@ func NewServer(cfg *config.AppConfig) (*Server, func()error) {
 	// middlewares
 	app.Use(middleware.RecoveryMiddleware())
 	app.Use(cors.New())
-	app.Use(logger.New())
+
+	app.Use(func(c *fiber.Ctx) error {
+		start := time.Now()
+		err := c.Next()
+		duration := time.Since(start)
+
+		logging.LogInfo("http request",
+			c,
+			"method", c.Method(),
+			"path", c.Path(),
+			"status", c.Response().StatusCode(),
+			"duration_ms", duration.Milliseconds(),
+		)
+		return err
+	})
 
 	// health
 	app.Get("/health", func(c *fiber.Ctx) error {
@@ -46,8 +60,8 @@ func NewServer(cfg *config.AppConfig) (*Server, func()error) {
 	})
 
 	app.Get("/favicon.ico", func(c *fiber.Ctx) error {
-    return c.SendStatus(fiber.StatusNoContent)
-})
+		return c.SendStatus(fiber.StatusNoContent)
+	})
 
 	// routes
 	routes.SetUpRoutes(
@@ -61,7 +75,9 @@ func NewServer(cfg *config.AppConfig) (*Server, func()error) {
 		container.WishlistHandler,
 		cfg,
 	)
-	
+
+	logging.LogInfo("server initialized", nil, "host", cfg.Server.Host, "port", cfg.Server.Port)
+
 	return &Server{
 		app:     app,
 		cfg:     cfg,
@@ -73,9 +89,10 @@ func (s *Server) Run() error {
 	addr := fmt.Sprintf("%s:%d", s.cfg.Server.Host, s.cfg.Server.Port)
 
 	go func() {
-		log.Printf("server running at %s", addr)
+		logging.LogInfo("server starting", nil, "addr", addr)
 		if err := s.app.Listen(addr); err != nil {
-			log.Fatal(err)
+			logging.LogWarn("server failed to start", nil, err, "addr", addr)
+			os.Exit(1)
 		}
 	}()
 
@@ -83,21 +100,24 @@ func (s *Server) Run() error {
 	signal.Notify(quit, os.Interrupt)
 	<-quit
 
-	log.Println("shutting down server...")
+	logging.LogInfo("server shutting down...", nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := s.app.ShutdownWithContext(ctx); err != nil {
-		return err
+		logging.LogWarn("server shutdown error", nil, err)
 	}
 
-	return s.cleanup()
+	if err := s.cleanup(); err != nil {
+		logging.LogWarn("cleanup failed", nil, err)
+	} else {
+		logging.LogInfo("cleanup finished successfully", nil)
+	}
+
+	logging.LogInfo("server stopped gracefully", nil)
+	return nil
 }
-
-
-
-
 
 
 

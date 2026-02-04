@@ -50,7 +50,7 @@ func (h *AuthHandler) Signup(c *fiber.Ctx) error {
 	}
 
 	logging.LogInfo("signup successful", c, "email", req.Email)
-	return c.JSON(fiber.Map{"message": "signup successful"})
+	return c.JSON(fiber.Map{"message": "OTP has been sent"})
 }
 
 // POST /auth/login
@@ -157,7 +157,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 
 
 	if err := h.authSvc.ChangePassword(userID, req.CurrentPassword, req.NewPassword); err != nil {
-		logging.LogWarn("change password failed: service error", c, err, "userID", userID)
+		logging.LogWarn("change password failed: service error,auth,Svc problem", c, err, "userID", userID)
 		return HandleError(c, err)
 	}
 
@@ -173,6 +173,7 @@ func (h *AuthHandler) ForgotPassword(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&req); err != nil {
+        logging.LogWarn("forgot password failed: body parse", c, err)
 		return HandleError(c, service.ErrInvalidInput)
 	}
 	if err:= validator.Validate.Struct(req);err!=nil{
@@ -184,6 +185,7 @@ func (h *AuthHandler) ForgotPassword(c *fiber.Ctx) error {
 
 	err := h.authSvc.ForgotPassword(req.Email)
 	if err != nil {
+		logging.LogWarn("forgot password failed: service error,auth,Svc problem", c, err)	
 		return HandleError(c, err)
 	}
 
@@ -251,38 +253,70 @@ func (h *AuthHandler) ResetPasswordWithOTP(c *fiber.Ctx) error {
 
 //ResendVerification
 func (h *AuthHandler) ResendVerification(c *fiber.Ctx) error {
-    type request struct {
-        Email string `json:"email"`
-    }
+	type request struct {
+		Email string `json:"email"`
+	}
 
-    var body request
-    if err := c.BodyParser(&body); err != nil {
-        return fiber.ErrBadRequest
-    }
+	var body request
+	if err := c.BodyParser(&body); err != nil {
+		logging.LogWarn("resend verification failed: body parse", c, err)
+		return fiber.ErrBadRequest
+	}
 
-    err := h.authSvc.ResendVerificationEmail(body.Email)
-    if err != nil {
-        if se, ok := err.(*service.ServiceError); ok {
-            return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-                "code": se.Code,
-                "msg":  se.Msg,
-            })
-        }
-        return fiber.ErrInternalServerError
-    }
+	err := h.authSvc.ResendVerificationEmail(body.Email)
+	if err != nil {
+		logging.LogWarn("resend verification failed: service error", c, err, "email", body.Email)
 
-    return c.JSON(fiber.Map{
-        "msg": "Verification OTP resent successfully",
-    })
+		if se, ok := err.(*service.ServiceError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"code": se.Code,
+				"msg":  se.Msg,
+			})
+		}
+
+		logging.LogWarn("resend verification: unexpected error", c, err, "email", body.Email)
+		return fiber.ErrInternalServerError
+	}
+
+	logging.LogInfo("resend verification succeeded", c, "email", body.Email)
+
+	return c.JSON(fiber.Map{
+		"msg": "Verification OTP resent successfully",
+	})
 }
 
+
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
-	c.Cookie(&fiber.Cookie{
-		Name:     "refresh_token",
-		Value:    "",
-		Expires:  time.Now().Add(-time.Hour),
-		HTTPOnly: true,
-		Path:     "/auth/refresh",
-	})
-	return c.JSON(fiber.Map{"message": "logged out"})
+
+    // Get refresh token from cookie OR request body
+    refreshToken := c.Cookies("refresh_token")
+    
+    if refreshToken == "" {
+        var req struct {
+            RefreshToken string `json:"refresh_token"`
+        }
+        if err := c.BodyParser(&req); err == nil {
+            refreshToken = req.RefreshToken
+        }
+    }
+    
+    if refreshToken == "" {
+        return HandleError(c, service.ErrInvalidInput.WithContext("no refresh token provided"))
+    }
+    
+    if err := h.authSvc.Logout(refreshToken); err != nil {
+        return HandleError(c, err)
+    }
+    
+    // Clear cookie
+    c.Cookie(&fiber.Cookie{
+        Name:     "refresh_token",
+        Value:    "",
+        Expires:  time.Now().Add(-time.Hour),
+        HTTPOnly: true,
+        Path:     "/",
+    })
+    
+    logging.LogInfo("user logged out", c)
+    return c.JSON(fiber.Map{"message": "logged out"})
 }

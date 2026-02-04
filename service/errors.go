@@ -76,6 +76,10 @@ var (
         Code: "UNAUTHORIZED",
         Msg:  "unauthorized",
     }
+	ErrNotFound = &ServiceError{
+		Code: "RESOURCE_NOT_FOUND",
+		Msg:  "resource not found",
+	}
 
 )
 

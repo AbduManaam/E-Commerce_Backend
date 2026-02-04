@@ -4,8 +4,8 @@ import (
 	"errors"
 	"log"
 	"os"
-	"time"
 	"strings"
+	"time"
 
 	"backend/config"
 	"backend/internal/domain"
@@ -13,6 +13,7 @@ import (
 	"backend/utils"
 	"backend/utils/email"
 	"backend/utils/hash"
+	"backend/utils/logging"
 	"backend/utils/otp"
 
 	"golang.org/x/crypto/bcrypt"
@@ -21,14 +22,15 @@ import (
 
 type AuthService struct {
 	userRepo   repository.UserRepository
+	authRepo repository.AuthRepository  
 	jwtConfig  *config.JWTConfig
 	emailSvc  email.Service
 	logger     *log.Logger
 }
 
-// Constructor with JWT config
 func NewAuthService(
 	userRepo repository.UserRepository,
+	authRepo repository.AuthRepository,
 	jwtConfig *config.JWTConfig,
 	emailSvc email.Service,
 ) *AuthService {
@@ -152,95 +154,145 @@ func (s *AuthService) VerifyOTP(userEmail, otpCode string) error {
 
 // LOGIN
 func (s *AuthService) Login(userEmail, password string) (*domain.User, string, string, error) {
-	
-	if !isValidEmail(userEmail) || password == "" {
-		return nil, "", "", ErrInvalidInput
-	}
-	
-	
-	user, err := s.userRepo.GetByEmail(userEmail)
-	if err != nil || user == nil {
-		return nil, "", "", ErrInvalidLogin
-	}
+    if !isValidEmail(userEmail) || password == "" {
+        return nil, "", "", ErrInvalidInput
+    }
 
-	// Check if user is blocked
-	if user.IsBlocked {
-		return nil, "", "", ErrUserBlocked
-	}
-	if !user.IsVerified {
-		return nil, "", "", &ServiceError{
-			Code: "EMAIL_NOT_VERIFIED",
-			Msg:  "Please verify your email address before logging in",
-		}
-	}
+    user, err := s.userRepo.GetByEmail(userEmail)
+    if err != nil {
+        logging.LogWarn("login failed: repo error", nil, err, "email", userEmail)
+        return nil, "", "", ErrInvalidLogin
+    }
 
-	if !hash.CheckPassword(password, user.Password) {
-		return nil, "", "", ErrInvalidLogin
-	}
+    if user == nil {
+        logging.LogWarn("user not found", nil, err, "Email", userEmail)
+        return nil, "", "", ErrInvalidLogin.WithContext("")
+    }
 
-	// Generate JWT tokens
-	accessToken, err := utils.GenerateAccessToken(
-		user.ID,
-		user.Role,
-		s.jwtConfig.AccessSecret,
-		time.Duration(s.jwtConfig.AccessExpiry)*time.Second,
-	)
-	if err != nil {
-		return nil, "", "", err
-	}
+    // Check if user is blocked
+    if user.IsBlocked {
+        return nil, "", "", ErrUserBlocked
+    }
+    if !user.IsVerified {
+        return nil, "", "", &ServiceError{
+            Code: "EMAIL_NOT_VERIFIED",
+            Msg:  "Please verify your email address before logging in",
+        }
+    }
 
-	refreshToken, err := utils.GenerateRefreshToken(
-		user.ID,
-		user.Role,
-		s.jwtConfig.RefreshSecret,
-		time.Duration(s.jwtConfig.RefreshExpiry)*time.Second,
-	)
-	if err != nil {
-		return nil, "", "", err
-	}
+    if !hash.CheckPassword(password, user.Password) {
+        return nil, "", "", ErrInvalidLogin
+    }
 
-	return user, accessToken, refreshToken, nil
+    // Generate JWT tokens
+    accessToken, err := utils.GenerateAccessToken(
+        user.ID,
+        user.Role,
+        s.jwtConfig.AccessSecret,
+        time.Duration(s.jwtConfig.AccessExpiry)*time.Second,
+    )
+    if err != nil {
+        return nil, "", "", err
+    }
+
+    refreshToken, err := utils.GenerateRefreshToken(
+        user.ID,
+        user.Role,
+        s.jwtConfig.RefreshSecret,
+        time.Duration(s.jwtConfig.RefreshExpiry)*time.Second,
+    )
+    if err != nil {
+        return nil, "", "", err
+    }
+
+    // Store refresh token in database
+    tokenHash := utils.HashString(refreshToken) // You need to create this helper
+    expiresAt := time.Now().Add(time.Duration(s.jwtConfig.RefreshExpiry) * time.Second)
+    if err := s.authRepo.SaveRefreshToken(user.ID, tokenHash, expiresAt); err != nil {
+        return nil, "", "", err
+    }
+
+    return user, accessToken, refreshToken, nil
 }
+
+
+//Logout
+func(s *AuthService)Logout(refreshToken string)error{
+	if refreshToken==""{
+		logging.LogWarn(
+			"Logout failed: empty refresh token",
+			nil,   
+			nil,   
+			"action", "logout",
+		)
+		return ErrInvalidInput
+	}
+	tokenHash:= utils.HashString(refreshToken)
+	 return s.authRepo.DeleteRefreshToken(tokenHash)
+}
+
+
 
 // REFRESH TOKEN
 func (s *AuthService) RefreshToken(refreshToken string) (string, string, error) {
-	claims, err := utils.ValidateRefreshToken(refreshToken, s.jwtConfig.RefreshSecret)
-	if err != nil {
-		return "", "", ErrInvalidLogin
-	}
+    // First check if token exists in DB
+    tokenHash := utils.HashString(refreshToken)
+    storedToken, err := s.authRepo.GetRefreshToken(tokenHash)
+    if err != nil || storedToken == nil {
+        return "", "", ErrInvalidToken
+    }
+    
+    // Check expiry
+    if time.Now().After(storedToken.Expired_at) {
+        s.authRepo.DeleteRefreshToken(tokenHash)
+        return "", "", ErrInvalidToken
+    }
 
-	user, err := s.userRepo.GetByID(claims.UserID)
-	if err != nil || user == nil {
-		return "", "", ErrUserNotFound
-	}
+    // Now validate the JWT token
+    claims, err := utils.ValidateRefreshToken(refreshToken, s.jwtConfig.RefreshSecret)
+    if err != nil {
+        // Also delete invalid token from database
+        s.authRepo.DeleteRefreshToken(tokenHash)
+        return "", "", ErrInvalidToken
+    }
 
-	if user.IsBlocked {
-		return "", "", ErrUserBlocked
-	}
+    user, err := s.userRepo.GetByID(claims.UserID)
+    if err != nil || user == nil {
+        return "", "", ErrUserNotFound
+    }
 
-	newAccessToken, err := utils.GenerateAccessToken(
-		user.ID,
-		user.Role,
-		s.jwtConfig.AccessSecret,
-		time.Duration(s.jwtConfig.AccessExpiry)*time.Second,
-	)
-	if err != nil {
-		return "", "", err
-	}
+    if user.IsBlocked {
+        return "", "", ErrUserBlocked
+    }
 
-	newRefreshToken, err := utils.GenerateRefreshToken(
-		user.ID,
-		user.Role,
-		s.jwtConfig.RefreshSecret,
-		time.Duration(s.jwtConfig.RefreshExpiry)*time.Second,
-	)
-	if err != nil {
-		return "", "", err
-	}
+    newAccessToken, err := utils.GenerateAccessToken(
+        user.ID,
+        user.Role,
+        s.jwtConfig.AccessSecret,
+        time.Duration(s.jwtConfig.AccessExpiry)*time.Second,
+    )
+    if err != nil {
+        return "", "", err
+    }
 
-	return newAccessToken, newRefreshToken, nil
+    newRefreshToken, err := utils.GenerateRefreshToken(
+        user.ID,
+        user.Role,
+        s.jwtConfig.RefreshSecret,
+        time.Duration(s.jwtConfig.RefreshExpiry)*time.Second,
+    )
+    if err != nil {
+        return "", "", err
+    }
+
+    // Delete old token and save new one
+    s.authRepo.DeleteRefreshToken(tokenHash)
+    newTokenHash := utils.HashString(newRefreshToken)
+    expiresAt := time.Now().Add(time.Duration(s.jwtConfig.RefreshExpiry) * time.Second)
+    s.authRepo.SaveRefreshToken(claims.UserID, newTokenHash, expiresAt)
+
+    return newAccessToken, newRefreshToken, nil
 }
-
 //-----------------------------------------------------
 
 func (s *AuthService) RefreshExpiry() int {

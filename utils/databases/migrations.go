@@ -12,6 +12,7 @@ func AutoMigrate(db *gorm.DB) {
 		&domain.User{},
 		&domain.Product{},
 		&domain.Order{},
+		 &domain.RefreshToken{}, 
 		&domain.CartItem{},
 		&domain.WishlistItem{},
 	)
