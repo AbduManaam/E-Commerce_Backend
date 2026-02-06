@@ -119,10 +119,11 @@ func (r *productRepository) Delete(id uint) error {
 func (r *productRepository) ListFiltered(q dto.ProductListQuery) ([]domain.Product, error) {
 	var products []domain.Product
 
-	db := r.db.Model(&domain.Product{})
+	db := r.db.Model(&domain.Product{}).
+	      Preload("Category")
 
-	if q.Category != "" {
-		db = db.Where("category = ?", q.Category)
+	if q.CategoryID != nil {
+		db = db.Where("category-id = ?", *q.CategoryID)
 	}
 
 	if q.MinPrice!=nil &&  *q.MinPrice > 0 {
@@ -143,4 +144,24 @@ func (r *productRepository) ListFiltered(q dto.ProductListQuery) ([]domain.Produ
 		Error
 
 	return products, err
+}
+
+//------------------------------------------------
+
+type CategoryRepository struct{
+	db *gorm.DB
+}
+
+func NewCategoryRepository(db *gorm.DB) *CategoryRepository{
+   return &CategoryRepository{db:db}
+}
+
+func (c *CategoryRepository)Create(d *domain.Category)error{
+	return c.db.Create(d).Error
+}
+
+func (c *CategoryRepository) List() ([]domain.Category,error){
+   var category []domain.Category
+   err:=c.db.Find(&category).Error
+   return category,err
 }

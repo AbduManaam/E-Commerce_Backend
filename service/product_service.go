@@ -5,6 +5,7 @@ import (
 	"backend/internal/domain"
 	"backend/repository"
 	"log/slog"
+
 )
 
 
@@ -196,8 +197,27 @@ func(s *ProductService)ListActive(r dto.ProductListQuery)([]domain.Product,error
 	if r.Limit<50{
 		r.Limit=50
 	}
-	if r.Order!="asc" || r.Order!="desc"{
+	if r.Order!="asc" && r.Order!="desc"{
 		r.Order="desc"
 	}
-	return s.productRepo.List(r)
+	return s.productRepo.ListFiltered(r)
+}
+
+//----------------------------------------------
+
+type CategoryService struct{
+	repo *repository.CategoryRepository
+}
+
+func NewCategoryService(repo *repository.CategoryRepository) *CategoryService{
+	return &CategoryService{repo: repo}
+}
+
+func(c *CategoryService)Create(name string)(*domain.Category,error){
+   category:= &domain.Category{Name: name}
+   return category,c.repo.Create(category)
+}
+
+func(c *CategoryService)List()([]domain.Category,error){
+	return  c.repo.List()
 }

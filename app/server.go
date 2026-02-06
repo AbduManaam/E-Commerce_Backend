@@ -72,6 +72,7 @@ func NewServer(cfg *config.AppConfig) (*Server, func() error) {
 		container.ProductHandler,
 		container.OrderHandler,
 		container.CartHandler,
+		container.CategoryHandler, 
 		container.WishlistHandler,
 		cfg,
 	)

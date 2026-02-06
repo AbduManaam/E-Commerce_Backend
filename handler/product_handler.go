@@ -119,7 +119,7 @@ func (h *ProductHandler) ListProducts(c *fiber.Ctx) error {
 	return c.JSON(products)
 }
 
-func (h *ProductHandler) List(c *fiber.Ctx) error {
+func (h *ProductHandler) ListFiltered(c *fiber.Ctx) error {
 
 	var minPrice *float64
 
@@ -134,8 +134,19 @@ func (h *ProductHandler) List(c *fiber.Ctx) error {
 	  maxPrice= &v
 	}
 
+	var categoryId *uint
+
+
+	if c.Query("category_id")!=""{
+      v:= c.QueryInt("category_id")
+	  if  v>0{
+		val:=uint(v)
+		categoryId= &val
+	  }
+	}
+
 	req := dto.ProductListQuery{
-		Category: c.Query("category"),
+		CategoryID: categoryId,
 		Sort:     c.Query("sort","created_at"),
 		Order:    c.Query("order", "desc"),
 		Page:     c.QueryInt("page", 1),
@@ -150,4 +161,43 @@ func (h *ProductHandler) List(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(products)
+}
+
+//-----------------------------------------
+
+type CategoryHandler struct {
+	service *service.CategoryService
+}
+
+func NewCategoryHandler(service *service.CategoryService) *CategoryHandler {
+	return &CategoryHandler{service: service}
+}
+
+func (h *CategoryHandler) Create(c *fiber.Ctx) error {
+	var body struct {
+		Name string `json:"name"`
+	}
+
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid JSON body"})
+	}
+
+	if body.Name == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "category name is required"})
+	}
+
+	category, err := h.service.Create(body.Name)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(201).JSON(category)
+}
+
+func (h *CategoryHandler) List(c *fiber.Ctx) error {
+	categories, err := h.service.List()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(categories)
 }

@@ -6,6 +6,7 @@ import (
 	"backend/service"
 	"backend/utils/logging"
 	validator "backend/utils/validation"
+	"fmt"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -83,7 +84,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		Secure:   false,              
 		SameSite: fiber.CookieSameSiteStrictMode,
 		Expires:  time.Now().Add(time.Duration(h.authSvc.RefreshExpiry()) * time.Second),
-		Path:     "/auth/login",
+		Path:     "/",
 	})
 
 	logging.LogInfo("login successful", c, "userID", user.ID)
@@ -104,6 +105,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 // POST /auth/refresh
 func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	refreshToken := c.Cookies("refresh_token")
+	fmt.Println("referesh",refreshToken)
 	if refreshToken == "" {
 		logging.LogWarn("missing refresh token cookie", c, fiber.ErrUnauthorized)
 		return HandleError(c, service.ErrUnauthorized)

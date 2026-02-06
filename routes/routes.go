@@ -16,6 +16,7 @@ func SetUpRoutes(
 	productHandler *handler.ProductHandler,
 	orderHandler *handler.OrderHandler,
 	cartHandler *handler.CartHandler,
+	categoryHandler *handler.CategoryHandler,
 	wishlistHandler *handler.WishlistHandler,
 	cfg *config.AppConfig,
 ) {
@@ -44,6 +45,8 @@ func SetUpRoutes(
 	products := app.Group("/products")
 	products.Get("/", productHandler.ListProducts)
 	products.Get("/:id", productHandler.GetProduct)
+	products.Get("/filter", productHandler.ListFiltered)
+
 
 	// Admin routes
 	admin := app.Group("/admin", middleware.AuthMiddleware(cfg), middleware.AdminMiddleware())
@@ -52,6 +55,11 @@ func SetUpRoutes(
 	admin.Post("/products", productHandler.CreateProduct)
 	admin.Put("/products/:id", productHandler.UpdateProduct)
 	admin.Delete("/products/:id", productHandler.DeleteProduct)
+	admin.Post("/categories",categoryHandler.Create )
+
+    categories:= app.Group("/categories")
+	categories.Get("/",categoryHandler.List)
+
 
 	// Order routes
 	orders := app.Group("/orders", middleware.AuthMiddleware(cfg))

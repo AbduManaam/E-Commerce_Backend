@@ -21,6 +21,8 @@ type Container struct {
 	OrderHandler    *handler.OrderHandler
 	CartHandler     *handler.CartHandler
 	WishlistHandler *handler.WishlistHandler
+    CategoryHandler *handler.CategoryHandler
+
 
 	DBCleanup func() error
 }
@@ -54,6 +56,12 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	orderRepo := repository.NewOrderRepository(db, logger)
 	cartRepo := repository.NewCartRepository(db, logger)
 	wishlistRepo := repository.NewWishlistRepository(db, logger)
+
+	categoryRepo:= repository.NewCategoryRepository(db)
+	categorySvc := service.NewCategoryService(categoryRepo)
+    categoryHandler := handler.NewCategoryHandler(categorySvc)
+
+
 
 	// Email
 	email.Init(cfg.SMTP)
@@ -97,6 +105,7 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 		OrderHandler:    handler.NewOrderHandler(orderSvc),
 		CartHandler:     handler.NewCartHandler(cartSvc),
 		WishlistHandler: handler.NewWishlistHandler(wishlistSvc),
+        CategoryHandler: categoryHandler, 
 		DBCleanup:       sqlDB.Close,
 	}, nil
 }

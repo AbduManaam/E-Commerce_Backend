@@ -1,7 +1,7 @@
 package dto
 
 type ProductListQuery struct{
-	Category string
+	CategoryID *uint
 	Sort     string
 	Order    string
 	Page     int
