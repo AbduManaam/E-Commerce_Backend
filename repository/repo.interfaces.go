@@ -1,6 +1,9 @@
 package repository
 
-import "backend/internal/domain"
+import (
+	"backend/handler/dto"
+	"backend/internal/domain"
+)
 
 type UserRepository interface {
 	Create(user *domain.User) error
@@ -14,7 +17,8 @@ type UserRepository interface {
 type ProductRepository interface {
 	Create(product *domain.Product) error
 	GetByID(id uint) (*domain.Product, error)
-	List() ([]*domain.Product, error)
+    List() ([]*domain.Product, error)               
+    ListFiltered(q dto.ProductListQuery) ([]domain.Product, error) 
 	Update(product *domain.Product) error
 	Delete(id uint) error
 }
@@ -39,6 +43,7 @@ type ProductRepositoryInterface interface {
 	GetByID(productID uint) (*domain.Product, error)
 	Create(p *domain.Product) error
 	List() ([]*domain.Product, error)
+	ListFiltered(q dto.ProductListQuery) ([]domain.Product, error)
 	Update(p *domain.Product) error
 	Delete(id uint) error
 }

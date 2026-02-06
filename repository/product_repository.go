@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"backend/handler/dto"
 	"backend/internal/domain"
 	"log/slog"
 
@@ -113,4 +114,33 @@ func (r *productRepository) Delete(id uint) error {
 		"product_id", id,
 	)
 	return nil
+}
+
+func (r *productRepository) ListFiltered(q dto.ProductListQuery) ([]domain.Product, error) {
+	var products []domain.Product
+
+	db := r.db.Model(&domain.Product{})
+
+	if q.Category != "" {
+		db = db.Where("category = ?", q.Category)
+	}
+
+	if q.MinPrice!=nil &&  *q.MinPrice > 0 {
+		db = db.Where("price >= ?", q.MinPrice)
+	}
+
+	if q.MaxPrice!=nil &&  *q.MaxPrice > 0 {
+		db = db.Where("price <= ?", q.MaxPrice)
+	}
+
+	offset := (q.Page - 1) * q.Limit
+
+	err := db.
+		Order(q.Sort + " " + q.Order).
+		Limit(q.Limit).
+		Offset(offset).
+		Find(&products).
+		Error
+
+	return products, err
 }

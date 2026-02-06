@@ -183,3 +183,21 @@ func (s *ProductService) DeleteProduct(productID uint) error {
 	s.logger.Info("DeleteProduct success", "product_id", productID)
 	return nil
 }
+
+func(s *ProductService)ListActive(r dto.ProductListQuery)([]domain.Product,error){
+	allowedSort:= map[string]bool{
+		"price": true,
+		"name": true,
+		"created_at": true,
+	}
+	if !allowedSort[r.Sort]{
+		r.Sort="created_at"
+	}
+	if r.Limit<50{
+		r.Limit=50
+	}
+	if r.Order!="asc" || r.Order!="desc"{
+		r.Order="desc"
+	}
+	return s.productRepo.List(r)
+}

@@ -32,7 +32,7 @@ func (r *authRepository) SaveRefreshToken(
 	token := &domain.RefreshToken{
 		UserID:     userID,
 		Token:      tokenHash,
-		Expired_at: expiresAt,
+		ExpiresAt: expiresAt,
 	}
 
 	return r.db.Create(token).Error

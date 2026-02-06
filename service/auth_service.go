@@ -36,6 +36,7 @@ func NewAuthService(
 ) *AuthService {
 	return &AuthService{
 		userRepo:  userRepo,
+		authRepo: authRepo,
 		jwtConfig: jwtConfig,
 		emailSvc:  emailSvc,
 		logger:    log.New(os.Stdout, "AuthService: ", log.LstdFlags),
@@ -243,7 +244,7 @@ func (s *AuthService) RefreshToken(refreshToken string) (string, string, error) 
     }
     
     // Check expiry
-    if time.Now().After(storedToken.Expired_at) {
+    if time.Now().After(storedToken.ExpiresAt) {
         s.authRepo.DeleteRefreshToken(tokenHash)
         return "", "", ErrInvalidToken
     }

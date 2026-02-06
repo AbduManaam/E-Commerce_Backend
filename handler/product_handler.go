@@ -118,3 +118,36 @@ func (h *ProductHandler) ListProducts(c *fiber.Ctx) error {
 	logging.LogInfo("products listed successfully", c, "count", len(products))
 	return c.JSON(products)
 }
+
+func (h *ProductHandler) List(c *fiber.Ctx) error {
+
+	var minPrice *float64
+
+	if c.Query("min_price") !=""{
+      v:= c.QueryFloat("min_price")
+	  minPrice= &v
+	}
+	var maxPrice *float64
+
+	if c.Query("max_price") !=""{
+      v:= c.QueryFloat("max_price")
+	  maxPrice= &v
+	}
+
+	req := dto.ProductListQuery{
+		Category: c.Query("category"),
+		Sort:     c.Query("sort","created_at"),
+		Order:    c.Query("order", "desc"),
+		Page:     c.QueryInt("page", 1),
+		Limit:    c.QueryInt("limit", 10),
+		MinPrice: minPrice,
+		MaxPrice: maxPrice,
+	}
+
+	products, err := h.productSvc.ListActive(req)
+	if err != nil {
+		return HandleError(c, err)
+	}
+
+	return c.JSON(products)
+}

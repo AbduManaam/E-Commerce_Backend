@@ -33,6 +33,7 @@ func SetUpRoutes(
 	auth.Post("/forgot-password", authHandler.ForgotPassword)
 	auth.Post("/reset-password-with-otp", authHandler.ResetPasswordWithOTP)
 	auth.Post("/change-password", middleware.AuthMiddleware(cfg), authHandler.ChangePassword)
+	auth.Post("/logout", middleware.AuthMiddleware(cfg), authHandler.Logout)
 
 	// Protected user routes
 	user := app.Group("/user", middleware.AuthMiddleware(cfg))
