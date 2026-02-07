@@ -44,8 +44,8 @@ func SetUpRoutes(
 	// Product routes
 	products := app.Group("/products")
 	products.Get("/", productHandler.ListProducts)
-	products.Get("/:id", productHandler.GetProduct)
 	products.Get("/filter", productHandler.ListFiltered)
+	products.Get("/:id", productHandler.GetProduct)
 
 
 	// Admin routes

@@ -28,9 +28,10 @@ var (
 	ErrUserExists        = &ServiceError{Code: "USER_EXISTS", Msg: "user with this email already exists"}
 	ErrInvalidLogin      = &ServiceError{Code: "INVALID_LOGIN", Msg: "invalid email or password"}
 	ErrOTPInvalid        = &ServiceError{Code: "OTP_INVALID", Msg: "invalid or expired OTP"}
-	ErrInvalidToken        = &ServiceError{Code: "TOKEN_INVALID", Msg: "invalid or expired TOKEN"}
+	ErrInvalidToken      = &ServiceError{Code: "TOKEN_INVALID", Msg: "invalid or expired TOKEN"}
 	ErrPasswordMismatch  = &ServiceError{Code: "PASSWORD_MISMATCH", Msg: "current password does not match"}
-    
+	ErrWeakPassword      = &ServiceError{Code: "WEAK_PASSWORD", Msg: "password is too weak"}
+	ErrPasswordReUse      = &ServiceError{Code: "PASSWORD_REUSE", Msg:  "new password cannot be the same as the old password"}
 	// ORDER ERRORS
 	ErrOrderNotCancelable = &ServiceError{
 		Code: "ORDER_NOT_CANCELABLE",

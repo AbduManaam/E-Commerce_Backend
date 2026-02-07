@@ -9,7 +9,7 @@ type Product struct {
     Price       float64  `gorm:"not null"`
     Stock       int      `gorm:"not null"`
     CategoryID  uint     `gorm:"not null"`
-    Category    Category `gorm:"foreignKey:CategoryID"`
+    Category    Category `gorm:"foreignKey:CategoryID;reference:ID"`
     IsActive    bool     `gorm:"default:true"`
     CreatedAt   time.Time
     UpdatedAt   time.Time

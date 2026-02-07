@@ -55,6 +55,7 @@ func (s *ProductService) CreateProduct(req dto.CreateProductRequest) (*domain.Pr
 		Description: req.Description,
 		Price:       req.Price,
 		Stock:       req.Stock,
+		CategoryID:  req.CategoryID,
 		IsActive:    true,
 	}
 
@@ -194,7 +195,14 @@ func(s *ProductService)ListActive(r dto.ProductListQuery)([]domain.Product,error
 	if !allowedSort[r.Sort]{
 		r.Sort="created_at"
 	}
-	if r.Limit<50{
+	if r.Page <= 0 {
+	r.Page = 1
+    }
+
+	if r.Limit<=0{
+		r.Limit=10
+	}
+	if r.Limit>50{
 		r.Limit=50
 	}
 	if r.Order!="asc" && r.Order!="desc"{

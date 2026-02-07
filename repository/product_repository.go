@@ -48,7 +48,9 @@ func (r *productRepository) Create(p *domain.Product) error {
 func (r *productRepository) GetByID(id uint) (*domain.Product, error) {
 	var product domain.Product
 
-	err := r.db.First(&product, id).Error
+	err := r.db.
+	Preload("Category").
+	First(&product, id).Error
 	if err != nil {
 		r.logger.Error(
 			"product get by id failed",
@@ -64,7 +66,9 @@ func (r *productRepository) GetByID(id uint) (*domain.Product, error) {
 func (r *productRepository) List() ([]*domain.Product, error) {
 	var products []*domain.Product
 
-	err := r.db.Find(&products).Error
+	err := r.db.
+	Preload("Category").
+	Find(&products).Error
 	if err != nil {
 		r.logger.Error(
 			"product list failed",
@@ -120,19 +124,27 @@ func (r *productRepository) ListFiltered(q dto.ProductListQuery) ([]domain.Produ
 	var products []domain.Product
 
 	db := r.db.Model(&domain.Product{}).
-	      Preload("Category")
-
+	      Preload("Category").
+          Where("is_active = ?", true)
 	if q.CategoryID != nil {
-		db = db.Where("category-id = ?", *q.CategoryID)
+		db = db.Where("category_id = ?", *q.CategoryID)
 	}
 
 	if q.MinPrice!=nil &&  *q.MinPrice > 0 {
-		db = db.Where("price >= ?", q.MinPrice)
+		db = db.Where("price >= ?", *q.MinPrice)
 	}
 
 	if q.MaxPrice!=nil &&  *q.MaxPrice > 0 {
-		db = db.Where("price <= ?", q.MaxPrice)
+		db = db.Where("price <= ?", *q.MaxPrice)
 	}
+	if q.Search != "" {
+        like := "%" + q.Search + "%"
+        db = db.Where(
+            "products.name ILIKE ? OR products.description ILIKE ?",
+            like, like,
+        )
+    }
+
 
 	offset := (q.Page - 1) * q.Limit
 

@@ -149,6 +149,7 @@ func (h *ProductHandler) ListFiltered(c *fiber.Ctx) error {
 		CategoryID: categoryId,
 		Sort:     c.Query("sort","created_at"),
 		Order:    c.Query("order", "desc"),
+		Search:   c.Query("search"),
 		Page:     c.QueryInt("page", 1),
 		Limit:    c.QueryInt("limit", 10),
 		MinPrice: minPrice,

@@ -15,6 +15,7 @@ import (
 	"backend/utils/hash"
 	"backend/utils/logging"
 	"backend/utils/otp"
+	validator "backend/utils/validation"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -52,9 +53,11 @@ func (s *AuthService) Signup(user *domain.User) error {
 	if !isValidEmail(user.Email) {
 		return ErrInvalidInput
 	}
-	if len(user.Password) < 6 {
-		return ErrInvalidInput
+	
+    if !validator.IsValidPassword(user.Password){
+		return ErrInvalidInput.WithContext("weak password")
 	}
+
 	if user.Role == "" {
 		user.Role = "user"
 	}
@@ -305,7 +308,7 @@ func (s *AuthService) RefreshExpiry() int {
 func (s *AuthService) ForgotPassword(userEmail  string) error {
 	user, err := s.userRepo.GetByEmail(userEmail )
 	if err != nil || user == nil {
-		return nil // Don't reveal if user exists
+		return nil
 	}
 
 	if user.IsBlocked {
@@ -354,6 +357,10 @@ func (s *AuthService) ResetPassword(userEmail, otpCode, newPassword string) erro
 			Msg:  "OTP expired",
 		}
 	}
+	if !validator.IsValidPassword(newPassword){
+    return ErrWeakPassword
+
+	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.OTP), []byte(otpCode)); err != nil {
 		return &ServiceError{
@@ -395,9 +402,12 @@ func (s *AuthService) ChangePassword(
 		return ErrInvalidInput
 	}
 
-	if oldPassword == newPassword || len(newPassword) < 8 {
-		return ErrInvalidInput
+	if oldPassword == newPassword{
+		return ErrPasswordReUse
 	}
+	if !validator.IsValidPassword(newPassword) {
+    return ErrWeakPassword
+}
 
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil || user == nil {
