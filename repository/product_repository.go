@@ -4,6 +4,7 @@ import (
 	"backend/handler/dto"
 	"backend/internal/domain"
 	"log/slog"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -124,28 +125,43 @@ func (r *productRepository) ListFiltered(q dto.ProductListQuery) ([]domain.Produ
 	var products []domain.Product
 
 	db := r.db.Model(&domain.Product{}).
-	      Preload("Category").
-          Where("is_active = ?", true)
+		Preload("Category").
+		Where("is_active = ?", true)
+
+	// Filter by category
 	if q.CategoryID != nil {
 		db = db.Where("category_id = ?", *q.CategoryID)
 	}
 
-	if q.MinPrice!=nil &&  *q.MinPrice > 0 {
+	// Filter by price range
+	if q.MinPrice != nil && *q.MinPrice > 0 {
 		db = db.Where("price >= ?", *q.MinPrice)
 	}
-
-	if q.MaxPrice!=nil &&  *q.MaxPrice > 0 {
+	if q.MaxPrice != nil && *q.MaxPrice > 0 {
 		db = db.Where("price <= ?", *q.MaxPrice)
 	}
+
+	// Filter by search term
 	if q.Search != "" {
-        like := "%" + q.Search + "%"
-        db = db.Where(
-            "products.name ILIKE ? OR products.description ILIKE ?",
-            like, like,
-        )
-    }
+		like := "%" + q.Search + "%"
+		db = db.Where(
+			"products.name ILIKE ? OR products.description ILIKE ?",
+			like, like,
+		)
+	}
 
+	// Filter by active offers
+	if q.OnlyActiveOffers {
+		now := time.Now()
+		db = db.Where(
+			"(discount_percent IS NOT NULL OR discount_amount IS NOT NULL) AND " +
+				"(offer_start IS NULL OR offer_start <= ?) AND " +
+				"(offer_end IS NULL OR offer_end >= ?)",
+			now, now,
+		)
+	}
 
+	// Pagination
 	offset := (q.Page - 1) * q.Limit
 
 	err := db.

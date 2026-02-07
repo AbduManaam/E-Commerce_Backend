@@ -5,7 +5,7 @@ import (
 	"backend/internal/domain"
 	"backend/repository"
 	"log/slog"
-
+	"time"
 )
 
 
@@ -50,6 +50,26 @@ func (s *ProductService) CreateProduct(req dto.CreateProductRequest) (*domain.Pr
 		return nil, ErrInvalidInput
 	}
 
+if req.DiscountPercent != nil {
+    return nil, ErrInvalidInput // cannot have both
+}
+
+var offerStart, offerEnd *time.Time
+if req.OfferStart != nil {
+    t, err := time.Parse(time.RFC3339, *req.OfferStart)
+    if err != nil {
+        return nil, ErrInvalidInput
+    }
+    offerStart = &t
+}
+if req.OfferEnd != nil {
+    t, err := time.Parse(time.RFC3339, *req.OfferEnd)
+    if err != nil {
+        return nil, ErrInvalidInput
+    }
+    offerEnd = &t
+}
+
 	product := &domain.Product{
 		Name:        req.Name,
 		Description: req.Description,
@@ -57,6 +77,9 @@ func (s *ProductService) CreateProduct(req dto.CreateProductRequest) (*domain.Pr
 		Stock:       req.Stock,
 		CategoryID:  req.CategoryID,
 		IsActive:    true,
+		DiscountPercent: req.DiscountPercent,
+		OfferStart:      offerStart,
+		OfferEnd:        offerEnd,
 	}
 
 	if err := s.productRepo.Create(product); err != nil {
@@ -110,13 +133,11 @@ func (s *ProductService) UpdateProduct(productID uint, req dto.UpdateProductRequ
 
 	product, err := s.productRepo.GetByID(productID)
 	if err != nil || product == nil {
-		s.logger.Warn(
-			"UpdateProduct failed: product not found",
-			"product_id", productID,
-		)
+		s.logger.Warn("UpdateProduct failed: product not found", "product_id", productID)
 		return ErrNotFound
 	}
 
+	// Update basic fields
 	if req.Name != nil {
 		if len(*req.Name) < 2 || len(*req.Name) > 100 {
 			return ErrInvalidInput
@@ -149,18 +170,44 @@ func (s *ProductService) UpdateProduct(productID uint, req dto.UpdateProductRequ
 		product.IsActive = *req.IsActive
 	}
 
+	// Update offer fields
+	layout := "2006-01-02T15:04:05Z07:00"
+
+	if req.DiscountPercent != nil {
+		if *req.DiscountPercent <= 0 || *req.DiscountPercent >= 100 {
+			return ErrInvalidInput
+		}
+		product.DiscountPercent = req.DiscountPercent
+		// Offer price can be calculated dynamically wherever needed:
+		// offerPrice := product.Price - (product.Price * (*req.DiscountPercent / 100))
+	}
+
+	if req.OfferStart != nil {
+		startTime, err := time.Parse(layout, *req.OfferStart)
+		if err != nil {
+			return ErrInvalidInput
+		}
+		product.OfferStart = &startTime
+	}
+
+	if req.OfferEnd != nil {
+		endTime, err := time.Parse(layout, *req.OfferEnd)
+		if err != nil {
+			return ErrInvalidInput
+		}
+		product.OfferEnd = &endTime
+	}
+
+	// Persist updates
 	if err := s.productRepo.Update(product); err != nil {
-		s.logger.Error(
-			"UpdateProduct failed: db error",
-			"product_id", productID,
-			"err", err,
-		)
+		s.logger.Error("UpdateProduct failed: db error", "product_id", productID, "err", err)
 		return err
 	}
 
 	s.logger.Info("UpdateProduct success", "product_id", productID)
 	return nil
 }
+
 
 func (s *ProductService) DeleteProduct(productID uint) error {
 	if productID == 0 {
