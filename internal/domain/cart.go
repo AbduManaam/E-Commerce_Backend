@@ -22,3 +22,8 @@ type CartItem struct{
 	Product Product `gorm:"foreignKey:ProductID"`
 
 }
+
+const (
+	MaxCartItems          = 20
+	MaxQuantityPerProduct = 10
+)

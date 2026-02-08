@@ -25,6 +25,16 @@ func NewOrderRepository(
 
 // ------------------------------------------------------------
 
+func (r *orderRepository) Begin() *gorm.DB {
+	return r.db.Begin()
+}
+
+func (r *orderRepository) CreateTx(tx *gorm.DB, order *domain.Order) error {
+	return tx.Create(order).Error
+}
+
+
+
 func (r *orderRepository) Create(order *domain.Order) error {
 	r.logger.Info(
 		"creating order",

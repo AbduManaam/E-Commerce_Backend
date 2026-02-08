@@ -4,6 +4,7 @@ import (
 	"backend/internal/domain"
 	"backend/repository"
 	"log"
+	"time"
 )
 
 type WishlistService struct {
@@ -50,6 +51,9 @@ func (s *WishlistService) Add(userID, productID uint) error {
 	return nil
 }
 
+
+
+
 func (s *WishlistService) Get(userID uint) ([]domain.WishlistItem, error) {
 	if userID == 0 {
 		s.logger.Println("Wishlist Get failed: invalid userID=0")
@@ -62,9 +66,22 @@ func (s *WishlistService) Get(userID uint) ([]domain.WishlistItem, error) {
 		return nil, err
 	}
 
+	// Calculate current prices for wishlist items
+	now := time.Now()
+    for i := range items {
+        if items[i].Product != nil {
+            items[i].Product.FinalPrice = items[i].Product.CalculatePrice(now)
+        }
+    }
+
+
 	s.logger.Printf("Wishlist Get success: userID=%d itemsCount=%d", userID, len(items))
 	return items, nil
 }
+
+
+
+
 
 func (s *WishlistService) Remove(userID, productID uint) error {
 	if userID == 0 || productID == 0 {

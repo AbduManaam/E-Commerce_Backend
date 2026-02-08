@@ -14,6 +14,9 @@ import (
 )
 
 type Container struct {
+
+	UserRepo repository.UserRepository
+
 	UserHandler     *handler.UserHandler
 	AdminHandler    *handler.AdminUserHandler
 	AuthHandler     *handler.AuthHandler
@@ -61,7 +64,8 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	categorySvc := service.NewCategoryService(categoryRepo)
     categoryHandler := handler.NewCategoryHandler(categorySvc)
 
-
+     var productReader repository.ProductReader = productRepo
+     var productWriter repository.ProductWriter = productRepo
 
 	// Email
 	email.Init(cfg.SMTP)
@@ -79,25 +83,30 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	productSvc := service.NewProductService(productRepo,logger)
 
 	orderSvc := service.NewOrderService(
-		orderRepo,
-		productRepo,
-		repoLogger,
-	)
+	orderRepo,
+	productReader,
+	productWriter,
+	cartRepo,
+	repoLogger,
+)
 
 	cartSvc := service.NewCartService(
 		cartRepo,
-		productRepo,
+		productReader,
+	    productWriter,
 		repoLogger,
 	)
 
 	wishlistSvc := service.NewWishlistService(
-		wishlistRepo,
-		productRepo,
-		repoLogger,
-	)
+	wishlistRepo,
+	productReader,
+	repoLogger,
+)
 
 	// Handlers
 	return &Container{
+
+		UserRepo: userRepo,
 		AuthHandler:     handler.NewAuthHandler(authSvc),
 		AdminHandler:    handler.NewAdminUserHandler(userSvc),
 		UserHandler:     handler.NewUserHandler(userSvc),

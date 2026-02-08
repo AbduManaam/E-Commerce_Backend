@@ -8,7 +8,7 @@ type CreateProductRequest struct {
     CategoryID      uint     `json:"category_id" validate:"required"`
     
     DiscountPercent *float64 `json:"discount_percent" validate:"omitempty,gt=0,lt=100"`
-    OfferStart      *string  `json:"offer_start" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00"` // ISO8601
+    OfferStart      *string  `json:"offer_start" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00"` 
     OfferEnd        *string  `json:"offer_end" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00"`
 }
 

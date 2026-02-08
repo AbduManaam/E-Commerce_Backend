@@ -8,5 +8,5 @@ type WishlistItem struct {
 	ProductID uint `gorm:"Index:not null"`
 	CreatedAt time.Time
  
-	Product Product `gorm:"foreignKey:ProductID"`
+	Product *Product `gorm:"foreignKey:ProductID"`
 }

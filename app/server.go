@@ -75,6 +75,7 @@ func NewServer(cfg *config.AppConfig) (*Server, func() error) {
 		container.CategoryHandler, 
 		container.WishlistHandler,
 		cfg,
+		container.UserRepo,
 	)
 
 	logging.LogInfo("server initialized", nil, "host", cfg.Server.Host, "port", cfg.Server.Port)
@@ -119,10 +120,3 @@ func (s *Server) Run() error {
 	logging.LogInfo("server stopped gracefully", nil)
 	return nil
 }
-
-
-
-
-
-
-

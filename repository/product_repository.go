@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+
 )
 
 type productRepository struct {
@@ -18,7 +20,7 @@ type productRepository struct {
 func NewProductRepository(
 	db *gorm.DB,
 	logger *slog.Logger,
-) ProductRepositoryInterface {
+) ProductRepository {
 	return &productRepository{
 		db:     db,
 		logger: logger,
@@ -192,4 +194,46 @@ func (c *CategoryRepository) List() ([]domain.Category,error){
    var category []domain.Category
    err:=c.db.Find(&category).Error
    return category,err
+}
+
+func (r *productRepository) GetByIDForUpdate(
+	tx *gorm.DB,
+	id uint,
+) (*domain.Product, error) {
+
+	var product domain.Product
+
+	err := tx.
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&product, id).
+		Error
+
+	if err != nil {
+		r.logger.Error(
+			"product get for update failed",
+			"product_id", id,
+			"err", err,
+		)
+		return nil, err
+	}
+
+	return &product, nil
+}
+
+
+func (r *productRepository) UpdateTx(
+	tx *gorm.DB,
+	product *domain.Product,
+) error {
+
+	if err := tx.Save(product).Error; err != nil {
+		r.logger.Error(
+			"product update tx failed",
+			"product_id", product.ID,
+			"err", err,
+		)
+		return err
+	}
+
+	return nil
 }

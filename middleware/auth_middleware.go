@@ -4,13 +4,14 @@ import (
 	"strings"
 
 	"backend/config"
+	"backend/repository"
 	"backend/utils"
 	"backend/utils/logging"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-func AuthMiddleware(cfg *config.AppConfig) fiber.Handler {
+func AuthMiddleware(cfg *config.AppConfig,userRepo repository.UserRepository) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
@@ -33,6 +34,29 @@ func AuthMiddleware(cfg *config.AppConfig) fiber.Handler {
 			logging.LogWarn("invalid or expired access token", c, err)
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "invalid or expired token",
+			})
+		}
+			// 3. Load user from DB (CRITICAL)
+		user, err := userRepo.GetByID(claims.UserID)
+		if err != nil || user == nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "user not found",
+			})
+		}
+
+		// 4. Blocked user check (FORCE LOGOUT)
+		if user.IsBlocked {
+			c.ClearCookie("access_token")
+			c.ClearCookie("refresh_token")
+
+			logging.LogWarn("blocked user access attempt", c, nil,
+				"userID", user.ID,
+				"ip", c.IP(),
+			)
+
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error": "Account suspended. Contact support.",
+				"code":  "USER_BLOCKED",
 			})
 		}
 

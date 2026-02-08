@@ -136,13 +136,20 @@ func (h *ProductHandler) ListFiltered(c *fiber.Ctx) error {
 
 	var categoryId *uint
 
-
 	if c.Query("category_id")!=""{
       v:= c.QueryInt("category_id")
 	  if  v>0{
 		val:=uint(v)
 		categoryId= &val
 	  }
+	}
+
+    // Check if user is admin for showing inactive products
+	showInactive := false
+	if role, ok := c.Locals("role").(string); ok && role == "admin" {
+		if c.Query("show_inactive") == "true" {
+			showInactive = true
+		}
 	}
 
 	req := dto.ProductListQuery{
@@ -154,6 +161,8 @@ func (h *ProductHandler) ListFiltered(c *fiber.Ctx) error {
 		Limit:    c.QueryInt("limit", 10),
 		MinPrice: minPrice,
 		MaxPrice: maxPrice,
+		OnlyActiveOffers: c.Query("only_active_offers") == "true",
+		ShowInactive:    showInactive,
 	}
 
 	products, err := h.productSvc.ListActive(req)
@@ -161,8 +170,12 @@ func (h *ProductHandler) ListFiltered(c *fiber.Ctx) error {
 		return HandleError(c, err)
 	}
 
-	return c.JSON(products)
-}
+return c.JSON(fiber.Map{
+		"products": products,
+		"page":     req.Page,
+		"limit":    req.Limit,
+		"has_more": len(products) == req.Limit,
+	})}
 
 //-----------------------------------------
 

@@ -51,13 +51,30 @@ func (s *ProductService) CreateProduct(req dto.CreateProductRequest) (*domain.Pr
 	}
 
 if req.DiscountPercent != nil {
-    return nil, ErrInvalidInput // cannot have both
+	if *req.DiscountPercent<=0 || *req.DiscountPercent>=100{
+	   s.logger.Warn(
+		"CreateProduct failed: invalid discount_percent",
+		"value", *req.DiscountPercent,
+	   )
+	   return nil, ErrInvalidInput 
+	}
+}
+if (req.OfferStart!=nil || req.OfferEnd!=nil) && req.DiscountPercent==nil{
+	s.logger.Warn(
+		"CreateProduct failed: offer dates without discount",
+	)
+	return nil,ErrInvalidInput
 }
 
 var offerStart, offerEnd *time.Time
 if req.OfferStart != nil {
     t, err := time.Parse(time.RFC3339, *req.OfferStart)
     if err != nil {
+		s.logger.Warn(
+		"CreateProduct failed: invalid offer_start format",
+		"value", *req.OfferStart,
+		"error", err,
+		)
         return nil, ErrInvalidInput
     }
     offerStart = &t
@@ -120,6 +137,8 @@ func (s *ProductService) GetProduct(id uint) (*domain.Product, error) {
 		)
 		return nil, ErrNotFound
 	}
+    	now := time.Now()
+	product.FinalPrice = product.CalculatePrice(now)
 
 	return product, nil
 }
@@ -255,7 +274,24 @@ func(s *ProductService)ListActive(r dto.ProductListQuery)([]domain.Product,error
 	if r.Order!="asc" && r.Order!="desc"{
 		r.Order="desc"
 	}
-	return s.productRepo.ListFiltered(r)
+    if !r.ShowInactive {
+		isActive := true
+		r.IsActive = &isActive
+	}
+    
+   products, err := s.productRepo.ListFiltered(r)
+	if err != nil {
+		s.logger.Error("ListFiltered failed", "err", err)
+		return nil, err
+	}
+	
+	// Calculate dynamic prices for each product
+	now := time.Now()
+	for i := range products {
+		products[i].FinalPrice = products[i].CalculatePrice(now)
+	}
+	
+    return products, nil
 }
 
 //----------------------------------------------

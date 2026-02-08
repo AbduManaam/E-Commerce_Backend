@@ -9,7 +9,8 @@ type ProductListQuery struct{
 	Limit    int        `json:"limit"`
 	MinPrice *float64   `json:"min_price"`
     MaxPrice *float64   `json:"max_price"`
-	OnlyActiveOffers bool     `json:"only_active_offers"` // <-- add this
-
+	OnlyActiveOffers bool     `json:"only_active_offers"`
+    ShowInactive    bool     `form:"show_inactive"`      // For admin
+	IsActive        *bool    `form:"is_active"` 
 }
 

@@ -1,79 +1,141 @@
 package service
 
 import (
-	"backend/handler/dto"
 	"backend/internal/domain"
 	"backend/repository"
 	"errors"
 	"log"
+	"time"
 )
 
 type OrderService struct {
-	orderRepo   repository.OrderRepository
-	productRepo repository.ProductReader
-	logger      *log.Logger
+	orderRepo    repository.OrderRepository
+	productRead  repository.ProductReader
+	productWrite repository.ProductWriter
+	cartRepo     repository.CartRepository
+	logger       *log.Logger
 }
 
 func NewOrderService(
 	orderRepo repository.OrderRepository,
-	productRepo repository.ProductReader,
+	productRead repository.ProductReader,
+	productWrite repository.ProductWriter,
+	cartRepo repository.CartRepository,
 	logger *log.Logger,
 ) *OrderService {
 	return &OrderService{
-		orderRepo:   orderRepo,
-		productRepo: productRepo,
-		logger:      logger,
+		orderRepo:    orderRepo,
+		productRead:  productRead,
+		productWrite: productWrite,
+		cartRepo:     cartRepo,
+		logger:       logger,
 	}
 }
 
 func (s *OrderService) CreateOrder(
 	userID uint,
-	req dto.CreateOrderRequest,
+	addressID uint,
+	paymentMethod domain.PaymentMethod,
 ) (*domain.Order, error) {
 
-	var orderItems []domain.OrderItem
-	var total float64
-
-	for _, item := range req.Items {
-		if item.Quantity <= 0 {
-			s.logger.Printf(
-				"CreateOrder failed: invalid quantity userID=%d productID=%d qty=%d",
-				userID, item.ProductID, item.Quantity,
-			)
-			return nil, ErrInvalidInput
+	tx := s.orderRepo.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
 		}
+	}()
 
-		product, err := s.productRepo.GetByID(item.ProductID)
+	// 1. Get cart
+	cart, err := s.cartRepo.GetForUpdate(tx, userID)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if len(cart.Items) == 0 {
+		tx.Rollback()
+		return nil, ErrCartEmpty
+	}
+
+	var (
+		orderItems    []domain.OrderItem
+		total         float64
+		totalDiscount float64
+		now           = time.Now()
+	)
+
+	// 2. Process each cart item
+	for _, ci := range cart.Items {
+
+		product, err := s.productRepo.GetByIDForUpdate(tx, ci.ProductID)
 		if err != nil {
-			s.logger.Printf(
-				"CreateOrder failed: product not found userID=%d productID=%d err=%v",
-				userID, item.ProductID, err,
-			)
+			tx.Rollback()
 			return nil, ErrProductNotFound
 		}
 
-		lineTotal := product.Price * float64(item.Quantity)
-		total += lineTotal
+		if !product.IsActive || product.Stock <= 0 {
+			tx.Rollback()
+			return nil, ErrProductUnavailable
+		}
+
+		if product.Stock < int(ci.Quantity) {
+			tx.Rollback()
+			return nil, ErrInsufficientStock
+		}
+
+		unitPrice := product.Price
+		finalPrice := product.CalculatePrice(now)
+		discountPerUnit := unitPrice - finalPrice
+
+		subtotal := finalPrice * float64(ci.Quantity)
 
 		orderItems = append(orderItems, domain.OrderItem{
-			ProductID: product.ID,
-			Quantity:  item.Quantity,
-			Price:     product.Price,
+			ProductID:       product.ID,
+			Quantity:        ci.Quantity,
+			Price:           unitPrice,
+			DiscountPercent: discountPerUnit,
+			FinalPrice:      finalPrice,
+			Subtotal:        subtotal,
+			Status:          domain.OrderItemStatusPending,
 		})
+
+		total += unitPrice * float64(ci.Quantity)
+		totalDiscount += discountPerUnit * float64(ci.Quantity)
+
+		// Reduce stock
+		product.Stock -= int(ci.Quantity)
+		if err := s.productRepo.UpdateTx(tx, product); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
 	}
 
+	// 3. Create order
 	order := &domain.Order{
-		UserID: userID,
-		Status: domain.OrderStatusPending,
-		Total:  total,
-		Items:  orderItems,
+		UserID:            userID,
+		Items:             orderItems,
+		Total:             total,
+		Discount:          totalDiscount,
+		FinalTotal:        total - totalDiscount,
+		Status:            domain.OrderStatusPending,
+		ShippingAddressID: &addressID,
+		PaymentMethod:     paymentMethod,
+		PaymentStatus:     domain.PaymentStatusPending,
 	}
 
-	if err := s.orderRepo.Create(order); err != nil {
-		s.logger.Printf(
-			"CreateOrder failed: db create error userID=%d total=%.2f err=%v",
-			userID, total, err,
-		)
+	if err := s.orderRepo.CreateTx(tx, order); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	// 4. Clear cart
+	if err := s.cartRepo.ClearTx(tx, userID); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	// 5. Commit
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
