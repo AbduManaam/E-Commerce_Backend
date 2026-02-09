@@ -142,3 +142,19 @@ func (s *UserService) AdminUpdateUser(isAdmin bool, userID uint, name string, ro
 	s.logger.Info("admin user update success", "user_id", userID, "name", name, "role", role)
 	return nil
 }
+
+func (s *UserService) ListAllWithCount(page, limit int) ([]domain.User, int64, error) {
+	offset := (page - 1) * limit
+
+	users, err := s.userRepo.List(offset, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	total, err := s.userRepo.Count()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return users, total, nil
+}

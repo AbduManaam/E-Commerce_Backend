@@ -14,10 +14,13 @@ import (
 
 type AdminUserHandler struct {
 	userSvc *service.UserService
+	orderSvc *service.OrderService
 }
 
-func NewAdminUserHandler(userSvc *service.UserService) *AdminUserHandler {
-	return &AdminUserHandler{userSvc: userSvc}
+func NewAdminUserHandler(userSvc *service.UserService,orderSvc *service.OrderService,) *AdminUserHandler {
+	return &AdminUserHandler{
+		userSvc: userSvc,
+		orderSvc: orderSvc}
 }
 
 //BlockUser
@@ -78,4 +81,70 @@ func (h *AdminUserHandler) UpdateUser(c *fiber.Ctx) error {
 
 	logging.LogInfo("user updated successfully", c, "userID", userID, "name", req.Name, "role", req.Role)
 	return c.JSON(fiber.Map{"message": "user updated successfully"})
+}
+func (h *AdminUserHandler ) ListUsers(c *fiber.Ctx) error {
+	page := c.QueryInt("page", 1)
+	limit := c.QueryInt("limit", 20)
+
+	if page < 1 || limit < 1 || limit > 100 {
+		return HandleError(c, service.ErrInvalidInput)
+	}
+
+	users, total, err := h.userSvc.ListAllWithCount(page, limit)
+	if err != nil {
+		return HandleError(c, err)
+	}
+
+	return c.JSON(fiber.Map{
+		"data":  users,
+		"page":  page,
+		"limit": limit,
+		"total": total,
+	})
+}
+
+// GET /admin/users/:user_id/orders?page=1&limit=20
+func (h *AdminUserHandler ) GetUserOrders(c *fiber.Ctx) error {
+	userID, err := c.ParamsInt("user_id")
+	if err != nil || userID <= 0 {
+		return HandleError(c, service.ErrInvalidInput)
+	}
+
+	page := c.QueryInt("page", 1)
+	limit := c.QueryInt("limit", 20)
+
+	if page < 1 || limit < 1 || limit > 100 {
+		return HandleError(c, service.ErrInvalidInput)
+	}
+
+	orders, total, err := h.orderSvc.GetUserOrdersPaginated(
+		uint(userID),
+		page,
+		limit,
+	)
+	if err != nil {
+		return HandleError(c, err)
+	}
+
+	return c.JSON(fiber.Map{
+		"data":  orders,
+		"page":  page,
+		"limit": limit,
+		"total": total,
+	})
+}
+
+// GET /admin/orders/:order_id
+func (h *AdminUserHandler ) GetOrderDetails(c *fiber.Ctx) error {
+	orderID, err := c.ParamsInt("order_id")
+	if err != nil || orderID <= 0 {
+		return HandleError(c, service.ErrInvalidInput)
+	}
+
+	order, err := h.orderSvc.GetOrderDetail(uint(orderID))
+	if err != nil {
+		return HandleError(c, err)
+	}
+
+	return c.JSON(order)
 }

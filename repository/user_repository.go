@@ -140,3 +140,31 @@ func (r *userRepository) Delete(id uint) error {
 	)
 	return nil
 }
+
+func (r *userRepository) List(offset, limit int) ([]domain.User, error) {
+	var users []domain.User
+
+	query := r.db.Model(&domain.User{}).
+		Order("created_at DESC")
+
+	if limit > 0 {
+		query = query.Limit(limit).Offset(offset)
+	}
+
+	if err := query.Find(&users).Error; err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
+// Count returns total number of users
+func (r *userRepository) Count() (int64, error) {
+	var total int64
+
+	if err := r.db.Model(&domain.User{}).Count(&total).Error; err != nil {
+		return 0, err
+	}
+
+	return total, nil
+}

@@ -110,7 +110,7 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 
 		UserRepo: userRepo,
 		AuthHandler:     handler.NewAuthHandler(authSvc),
-		AdminHandler:    handler.NewAdminUserHandler(userSvc),
+		AdminHandler:    handler.NewAdminUserHandler(userSvc,orderSvc),
 		UserHandler:     handler.NewUserHandler(userSvc),
 		ProductHandler:  handler.NewProductHandler(productSvc),
 		OrderHandler:    handler.NewOrderHandler(orderSvc),

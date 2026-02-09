@@ -359,3 +359,42 @@ func (s *OrderService) CancelOrderItem(userID, orderID, itemID uint, reason stri
 
     return nil
 }
+
+func (s *OrderService) GetUserOrdersPaginated(
+	userID uint,
+	page int,
+	limit int,
+) ([]domain.Order, int64, error) {
+
+	if userID == 0 {
+		return nil, 0, ErrInvalidInput
+	}
+
+	offset := (page - 1) * limit
+
+	orders, err := s.orderRepo.GetOrdersByUserIDPaginated(userID, offset, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	total, err := s.orderRepo.CountOrdersByUserID(userID)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return orders, total, nil
+}
+
+func (s *OrderService) GetOrderDetail(orderID uint) (*domain.Order, error) {
+	if orderID == 0 {
+		return nil, ErrInvalidInput
+	}
+
+	order, err := s.orderRepo.GetByID(orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	return order, nil
+}
+

@@ -14,6 +14,8 @@ type UserRepository interface {
 	Update(user *domain.User) error
 	UpdatePassword(id uint, newPassword string) error
 	Delete(id uint) error
+	List(offset, limit int) ([]domain.User, error)
+	Count() (int64, error)
 }
 
 type ProductRepository interface {
@@ -44,6 +46,8 @@ type OrderRepository interface {
 	Update(order *domain.Order) error
 	UpdateOrderItemTx(tx *gorm.DB, item *domain.OrderItem) error
     UpdateTx(tx *gorm.DB, order *domain.Order) error 
+	GetOrdersByUserIDPaginated(userID uint, offset, limit int) ([]domain.Order, error)
+    CountOrdersByUserID(userID uint) (int64, error)
 }
 
 type WishlistRepositoryInterface interface {
@@ -60,4 +64,10 @@ type CartRepositoryInterface interface {
 	GetForUpdate(tx *gorm.DB, userID uint) (*domain.Cart, error)
     ClearTx(tx *gorm.DB, userID uint) error
 
+}
+
+type AddressRepository interface {
+    Create(address *domain.Address) error
+    ListByUser(userID uint) ([]domain.Address, error)
+    UnsetDefaultExcept(userID, addressID uint) error
 }

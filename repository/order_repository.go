@@ -213,6 +213,66 @@ func (r *orderRepository) Delete(id uint) error {
 	return nil
 }
 
+func (r *orderRepository) GetOrdersByUserIDPaginated(
+	userID uint,
+	offset int,
+	limit int,
+) ([]domain.Order, error) {
+
+	if userID == 0 {
+		r.logger.Error("invalid user id in GetOrdersByUserIDPaginated")
+		return nil, errors.New("invalid user id")
+	}
+
+	var orders []domain.Order
+
+	err := r.db.
+		Where("user_id = ?", userID).
+		Preload("Items").
+		Order("created_at DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&orders).Error
+
+	if err != nil {
+		r.logger.Error(
+			"paginated orders fetch failed",
+			"user_id", userID,
+			"offset", offset,
+			"limit", limit,
+			"err", err,
+		)
+		return nil, err
+	}
+
+	return orders, nil
+}
+func (r *orderRepository) CountOrdersByUserID(userID uint) (int64, error) {
+	if userID == 0 {
+		r.logger.Error("invalid user id in CountOrdersByUserID")
+		return 0, errors.New("invalid user id")
+	}
+
+	var count int64
+
+	err := r.db.
+		Model(&domain.Order{}).
+		Where("user_id = ?", userID).
+		Count(&count).Error
+
+	if err != nil {
+		r.logger.Error(
+			"count orders by user id failed",
+			"user_id", userID,
+			"err", err,
+		)
+		return 0, err
+	}
+
+	return count, nil
+}
+
+
 func (r *orderRepository) GetOrderItem(orderID, itemID uint) (*domain.OrderItem, error) {
     var item domain.OrderItem
     err := r.db.Where("order_id = ? AND id = ?", orderID, itemID).First(&item).Error
