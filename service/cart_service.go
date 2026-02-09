@@ -10,18 +10,21 @@ import (
 
 type CartService struct {
 	cartRepo    repository.CartRepositoryInterface
-	productRepo repository.ProductRepositoryInterface
+	productReader repository.ProductReader
+	productWriter repository.ProductWriter
 	logger      *log.Logger
 }
 
 func NewCartService(
 	cartRepo repository.CartRepositoryInterface,
-	productRepo repository.ProductRepositoryInterface,
+	productReader repository.ProductReader,
+	productWriter repository.ProductWriter,
 	logger *log.Logger,
 ) *CartService {
 	return &CartService{
 		cartRepo:    cartRepo,
-		productRepo: productRepo,
+		productReader: productReader,
+		productWriter: productWriter,
 		logger:      logger,
 	}
 }
@@ -39,7 +42,7 @@ func (s *CartService) AddItem(userID, productID uint, qty uint) error {
 	}
 
 	// Fetch product
-	product, err := s.productRepo.GetByID(productID)
+	product, err := s.productReader.GetByID(productID)
 	if err != nil || product == nil {
 		s.logger.Printf(
 			"AddItem failed: product not found userID=%d productID=%d err=%v",

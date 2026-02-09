@@ -57,12 +57,14 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	userRepo := repository.NewUserRepository(db, logger)
 	productRepo := repository.NewProductRepository(db, logger)
 	orderRepo := repository.NewOrderRepository(db, logger)
-	cartRepo := repository.NewCartRepository(db, logger)
+	// cartRepo := repository.NewCartRepository(db, logger)
 	wishlistRepo := repository.NewWishlistRepository(db, logger)
 
 	categoryRepo:= repository.NewCategoryRepository(db)
 	categorySvc := service.NewCategoryService(categoryRepo)
     categoryHandler := handler.NewCategoryHandler(categorySvc)
+
+     var cartRepo repository.CartRepositoryInterface = repository.NewCartRepository(db, logger)
 
      var productReader repository.ProductReader = productRepo
      var productWriter repository.ProductWriter = productRepo

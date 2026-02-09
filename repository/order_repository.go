@@ -212,3 +212,25 @@ func (r *orderRepository) Delete(id uint) error {
 	)
 	return nil
 }
+
+func (r *orderRepository) GetOrderItem(orderID, itemID uint) (*domain.OrderItem, error) {
+    var item domain.OrderItem
+    err := r.db.Where("order_id = ? AND id = ?", orderID, itemID).First(&item).Error
+    return &item, err
+}
+
+func (r *orderRepository) UpdateOrderItem(item *domain.OrderItem) error {
+    return r.db.Save(item).Error
+}
+
+func (r *orderRepository) Update(order *domain.Order) error {
+    return r.db.Save(order).Error
+}
+
+func (r *orderRepository) UpdateOrderItemTx(tx *gorm.DB, item *domain.OrderItem) error {
+    return tx.Save(item).Error
+}
+
+func (r *orderRepository) UpdateTx(tx *gorm.DB, order *domain.Order) error {
+    return tx.Save(order).Error
+}

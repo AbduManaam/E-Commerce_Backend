@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-type CartRepository struct {
+type cartRepository struct {
 	db     *gorm.DB
 	logger *slog.Logger
 }
@@ -16,8 +16,8 @@ type CartRepository struct {
 func NewCartRepository(
 	db *gorm.DB,
 	logger *slog.Logger,
-) *CartRepository {
-	return &CartRepository{
+) CartRepositoryInterface {
+	return &cartRepository{
 		db:     db,
 		logger: logger,
 	}
@@ -25,7 +25,7 @@ func NewCartRepository(
 
 // ------------------------------------------------------------
 
-func (r *CartRepository) GetorCreateCart(userID uint) (*domain.Cart, error) {
+func (r *cartRepository) GetorCreateCart(userID uint) (*domain.Cart, error) {
 	var cart domain.Cart
 
 	err := r.db.
@@ -69,7 +69,7 @@ func (r *CartRepository) GetorCreateCart(userID uint) (*domain.Cart, error) {
 	return &cart, nil
 }
 
-func (r *CartRepository) FindItem(cartID, itemID uint) (*domain.CartItem, error) {
+func (r *cartRepository) FindItem(cartID, itemID uint) (*domain.CartItem, error) {
 	var cartItem domain.CartItem
 
 	err := r.db.
@@ -94,7 +94,7 @@ func (r *CartRepository) FindItem(cartID, itemID uint) (*domain.CartItem, error)
 	return &cartItem, nil
 }
 
-func (r *CartRepository) Save(item *domain.CartItem) error {
+func (r *cartRepository) Save(item *domain.CartItem) error {
 	if err := r.db.Save(item).Error; err != nil {
 		r.logger.Error(
 			"failed to save cart item",
@@ -113,7 +113,7 @@ func (r *CartRepository) Save(item *domain.CartItem) error {
 	return nil
 }
 
-func (r *CartRepository) Delete(item *domain.CartItem) error {
+func (r *cartRepository) Delete(item *domain.CartItem) error {
 	if err := r.db.Delete(item).Error; err != nil {
 		r.logger.Error(
 			"failed to delete cart item",
@@ -132,7 +132,7 @@ func (r *CartRepository) Delete(item *domain.CartItem) error {
 	return nil
 }
 
-func (r *CartRepository) GetForUpdate(
+func (r *cartRepository) GetForUpdate(
 	tx *gorm.DB,
 	userID uint,
 ) (*domain.Cart, error) {
@@ -159,7 +159,7 @@ func (r *CartRepository) GetForUpdate(
 }
 
 
-func (r *CartRepository) ClearTx(
+func (r *cartRepository) ClearTx(
 	tx *gorm.DB,
 	userID uint,
 ) error {

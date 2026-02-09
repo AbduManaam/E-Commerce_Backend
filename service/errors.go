@@ -32,7 +32,10 @@ var (
 	ErrPasswordMismatch  = &ServiceError{Code: "PASSWORD_MISMATCH", Msg: "current password does not match"}
 	ErrWeakPassword      = &ServiceError{Code: "WEAK_PASSWORD", Msg: "password is too weak"}
 	ErrPasswordReUse      = &ServiceError{Code: "PASSWORD_REUSE", Msg:  "new password cannot be the same as the old password"}
-	// ORDER ERRORS
+    ErrCartEmpty          = &ServiceError{Code: "CART_EMPTY", Msg:"Cart is Empty" }
+	ErrProductUnavailable  = &ServiceError{Code: "PRODUCT_UNAVAILABLE", Msg:"This Product is currently unavailable" }
+	ErrInsufficientStock   = &ServiceError{Code: "INSUFFICIENT_STOCK", Msg:"This product is out of stock " }
+
 	ErrOrderNotCancelable = &ServiceError{
 		Code: "ORDER_NOT_CANCELABLE",
 		Msg:  "order cannot be canceled in its current state",
@@ -41,7 +44,6 @@ var (
 		Code: "INVALID_ORDER_STATUS",
 		Msg:  "invalid order status",
 	}
-	// PRODUCT
 	ErrProductNotFound = &ServiceError{
 		Code: "PRODUCT_NOT_FOUND",
 		Msg:  "product not found",

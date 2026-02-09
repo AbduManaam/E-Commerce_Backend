@@ -71,3 +71,18 @@ type OrderAddress struct {
     ZipCode   string `gorm:"not null"`
     Landmark  string
 }
+
+func IsValidOrderStatus (status OrderStatus)bool{
+	switch status{
+		case OrderStatusPending,
+		OrderStatusConfirmed,
+		OrderStatusPaid,
+		OrderStatusShipped,
+		OrderStatusDelivered,
+		OrderStatusCancelled:
+		return true
+
+	    default:
+		return false
+	}
+}

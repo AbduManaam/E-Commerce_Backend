@@ -36,9 +36,14 @@ type OrderRepository interface {
 	Create(order *domain.Order) error
 	GetByID(id uint) (*domain.Order, error)
 	GetOrdersByUserID(userID uint) ([]domain.Order, error)
+	GetOrderItem(orderID, itemID uint) (*domain.OrderItem, error)
 	UpdateStatus(orderID uint, status domain.OrderStatus) error
 	ListAll() ([]domain.Order, error)
 	Delete(id uint) error
+	UpdateOrderItem(item *domain.OrderItem) error
+	Update(order *domain.Order) error
+	UpdateOrderItemTx(tx *gorm.DB, item *domain.OrderItem) error
+    UpdateTx(tx *gorm.DB, order *domain.Order) error 
 }
 
 type WishlistRepositoryInterface interface {
@@ -52,7 +57,6 @@ type CartRepositoryInterface interface {
 	FindItem(CartID, ItemID uint) (*domain.CartItem, error)
 	Save(item *domain.CartItem) error
 	Delete(item *domain.CartItem) error
-
 	GetForUpdate(tx *gorm.DB, userID uint) (*domain.Cart, error)
     ClearTx(tx *gorm.DB, userID uint) error
 

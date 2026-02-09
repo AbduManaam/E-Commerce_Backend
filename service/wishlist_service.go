@@ -9,18 +9,18 @@ import (
 
 type WishlistService struct {
 	repo        repository.WishlistRepositoryInterface
-	productRepo repository.ProductRepositoryInterface
+	productReader repository.ProductReader
 	logger      *log.Logger
 }
 
 func NewWishlistService(
 	wishlistRepo repository.WishlistRepositoryInterface,
-	productRepo repository.ProductRepositoryInterface,
+	productReader repository.ProductReader,
 	logger *log.Logger,
 ) *WishlistService {
 	return &WishlistService{
 		repo:        wishlistRepo,
-		productRepo: productRepo,
+		productReader: productReader,
 		logger:      logger,
 	}
 }
@@ -32,7 +32,7 @@ func (s *WishlistService) Add(userID, productID uint) error {
 	}
 
 	// Check product exists
-	if _, err := s.productRepo.GetByID(productID); err != nil {
+	if _, err := s.productReader.GetByID(productID); err != nil {
 		s.logger.Printf("Wishlist Add failed: product not found productID=%d err=%v", productID, err)
 		return ErrProductNotFound
 	}
