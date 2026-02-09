@@ -35,7 +35,9 @@ func NewServer(cfg *config.AppConfig) (*Server, func() error) {
 		DisableStartupMessage: true,
 	})
 
-	// middlewares
+	// ------------------------------------------------
+	// Middlewares
+	// ------------------------------------------------
 	app.Use(middleware.RecoveryMiddleware())
 	app.Use(cors.New())
 
@@ -44,7 +46,8 @@ func NewServer(cfg *config.AppConfig) (*Server, func() error) {
 		err := c.Next()
 		duration := time.Since(start)
 
-		logging.LogInfo("http request",
+		logging.LogInfo(
+			"http request",
 			c,
 			"method", c.Method(),
 			"path", c.Path(),
@@ -54,7 +57,9 @@ func NewServer(cfg *config.AppConfig) (*Server, func() error) {
 		return err
 	})
 
-	// health
+	// ------------------------------------------------
+	// Health
+	// ------------------------------------------------
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
@@ -63,22 +68,35 @@ func NewServer(cfg *config.AppConfig) (*Server, func() error) {
 		return c.SendStatus(fiber.StatusNoContent)
 	})
 
-	// routes
+	// ------------------------------------------------
+	// Routes (FIXED)
+	// ------------------------------------------------
 	routes.SetUpRoutes(
 		app,
+
+		// handlers
 		container.AuthHandler,
 		container.AdminHandler,
 		container.UserHandler,
 		container.ProductHandler,
 		container.OrderHandler,
 		container.CartHandler,
-		container.CategoryHandler, 
+		container.CategoryHandler,
 		container.WishlistHandler,
+		container.AddressHandler, // ✅ CORRECT
+		container.PaymentHandler,
+
+		// infra
 		cfg,
 		container.UserRepo,
 	)
 
-	logging.LogInfo("server initialized", nil, "host", cfg.Server.Host, "port", cfg.Server.Port)
+	logging.LogInfo(
+		"server initialized",
+		nil,
+		"host", cfg.Server.Host,
+		"port", cfg.Server.Port,
+	)
 
 	return &Server{
 		app:     app,

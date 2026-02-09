@@ -41,7 +41,13 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 		})
 	}
 
-	order, err := h.orderSvc.CreateOrder(userID, req)
+	order, err := h.orderSvc.CreateOrder(
+		userID,
+		req.AddressID,
+		req.PaymentMethod,
+	)
+
+	
 	if err != nil {
 		logging.LogWarn("create order failed: service error", c, err, "userID", userID)
 		return HandleError(c, err)

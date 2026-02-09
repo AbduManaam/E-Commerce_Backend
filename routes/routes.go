@@ -87,9 +87,6 @@
 // 	wishlist.Get("/", wishlistHandler.Get)
 // 	wishlist.Delete("/:product_id", wishlistHandler.Delete)
 // }
-
-
-
 package routes
 
 import (
@@ -113,19 +110,22 @@ func SetUpRoutes(
 	cartHandler *handler.CartHandler,
 	categoryHandler *handler.CategoryHandler,
 	wishlistHandler *handler.WishlistHandler,
+	addressHandler *handler.AddressHandler,
+	paymentHandler *handler.PaymentHandler,
 
 	// Infra
 	cfg *config.AppConfig,
 	userRepo repository.UserRepository,
 ) {
-	// -----------------------------------
-	// Global middleware instance
-	// -----------------------------------
+
+	// -------------------------------
+	// Middleware
+	// -------------------------------
 	authMiddleware := middleware.AuthMiddleware(cfg, userRepo)
 
-	// -----------------------------------
-	// Public routes
-	// -----------------------------------
+	// -------------------------------
+	// Health
+	// -------------------------------
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status":  "ok",
@@ -133,9 +133,9 @@ func SetUpRoutes(
 		})
 	})
 
-	// -----------------------------------
+	// -------------------------------
 	// Auth routes
-	// -----------------------------------
+	// -------------------------------
 	auth := app.Group("/auth")
 	auth.Post("/signup", authHandler.Signup)
 	auth.Post("/login", authHandler.Login)
@@ -143,82 +143,95 @@ func SetUpRoutes(
 	auth.Post("/verify-otp", authHandler.VerifyOTP)
 	auth.Post("/forgot-password", authHandler.ForgotPassword)
 	auth.Post("/reset-password-with-otp", authHandler.ResetPasswordWithOTP)
+	auth.Post("/resend-verification", authHandler.ResendVerification)
 
 	auth.Post("/change-password", authMiddleware, authHandler.ChangePassword)
 	auth.Post("/logout", authMiddleware, authHandler.Logout)
 
-	// -----------------------------------
-	// User routes (protected)
-	// -----------------------------------
+	// -------------------------------
+	// User routes
+	// -------------------------------
 	user := app.Group("/user", authMiddleware)
 	user.Get("/profile", userHandler.GetProfile)
 	user.Put("/profile", userHandler.UpdateProfile)
 
-	// -----------------------------------
-	// Product routes (public)
-	// -----------------------------------
+	// -------------------------------
+	// Products (public)
+	// -------------------------------
 	products := app.Group("/products")
 	products.Get("/", productHandler.ListProducts)
 	products.Get("/filter", productHandler.ListFiltered)
 	products.Get("/:id", productHandler.GetProduct)
 
-	// -----------------------------------
-	// Category routes (public)
-	// -----------------------------------
+	// -------------------------------
+	// Categories (public)
+	// -------------------------------
 	categories := app.Group("/categories")
 	categories.Get("/", categoryHandler.List)
 
-	// -----------------------------------
-	// Admin routes (protected + admin)
-	// -----------------------------------
-	admin := app.Group(
-		"/admin",
-		authMiddleware,
-		middleware.AdminMiddleware(),
-	)
-
-	// User management
-	admin.Put("/users/:id", adminUserHandler.UpdateUser)
-	admin.Put("/users/:id/block", adminUserHandler.BlockUser)
-
-	// Product management
-	admin.Post("/products", productHandler.CreateProduct)
-	admin.Put("/products/:id", productHandler.UpdateProduct)
-	admin.Delete("/products/:id", productHandler.DeleteProduct)
-
-	// Category management
-	admin.Post("/categories", categoryHandler.Create)
-
-	// Order management
-	admin.Get("/orders", orderHandler.ListAllOrders)
-	admin.Get("/orders/:id", orderHandler.GetOrder)
-	admin.Put("/orders/:id/status", orderHandler.UpdateOrderStatus)
-	admin.Put("/orders/:id", orderHandler.AdminUpdateOrder)
-
-	// -----------------------------------
-	// Order routes (user)
-	// -----------------------------------
-	orders := app.Group("/orders", authMiddleware)
-	orders.Post("/", orderHandler.CreateOrder)
-	orders.Get("/", orderHandler.GetUserOrders)
-	orders.Get("/:id", orderHandler.GetOrder)
-	orders.Put("/:id/cancel", orderHandler.CancelOrder)
-
-	// -----------------------------------
-	// API group (optional prefix)
-	// -----------------------------------
+	// -------------------------------
+	// API (authenticated)
+	// -------------------------------
 	api := app.Group("/api", authMiddleware)
 
-	// Cart
+	// ---- Addresses
+	addresses := api.Group("/addresses")
+	addresses.Post("/", addressHandler.Create)
+	addresses.Get("/", addressHandler.List)
+	addresses.Get("/:id", addressHandler.GetByID)
+	addresses.Put("/:id", addressHandler.Update)
+	addresses.Delete("/:id", addressHandler.Delete)
+	addresses.Put("/:id/set-default", addressHandler.SetDefault)
+
+	// ---- Cart
 	cart := api.Group("/cart")
 	cart.Post("/", cartHandler.Add)
 	cart.Get("/", cartHandler.Get)
 	cart.Put("/item/:itemId", cartHandler.Update)
 	cart.Delete("/item/:itemId", cartHandler.Delete)
 
-	// Wishlist
+	// ---- Wishlist
 	wishlist := api.Group("/wishlist")
 	wishlist.Post("/", wishlistHandler.Add)
 	wishlist.Get("/", wishlistHandler.Get)
 	wishlist.Delete("/:product_id", wishlistHandler.Delete)
+
+	// ---- Orders (user)
+	orders := api.Group("/orders")
+	orders.Post("/", orderHandler.CreateOrder)
+	orders.Get("/", orderHandler.GetUserOrders)
+	orders.Get("/:id", orderHandler.GetOrder)
+	orders.Put("/:id/cancel", orderHandler.CancelOrder)
+
+	// ---- Payments (basic)
+	payments := api.Group("/payments")
+	payments.Post("/intent", paymentHandler.CreatePaymentIntent)
+
+	// -------------------------------
+	// Admin routes
+	// -------------------------------
+	admin := app.Group(
+		"/admin",
+		authMiddleware,
+		middleware.AdminMiddleware(),
+	)
+
+	// Admin users
+	admin.Get("/users", adminUserHandler.ListUsers)
+	admin.Put("/users/:id", adminUserHandler.UpdateUser)
+	admin.Put("/users/:id/block", adminUserHandler.BlockUser)
+	admin.Get("/users/:user_id/orders", adminUserHandler.GetUserOrders)
+
+	// Admin orders
+	admin.Get("/orders", orderHandler.ListAllOrders)
+	admin.Put("/orders/:id/status", orderHandler.UpdateOrderStatus)
+	admin.Put("/orders/:id", orderHandler.AdminUpdateOrder)
+
+	// Admin products
+	admin.Post("/products", productHandler.CreateProduct)
+	admin.Put("/products/:id", productHandler.UpdateProduct)
+	admin.Delete("/products/:id", productHandler.DeleteProduct)
+
+	// Admin categories
+	admin.Post("/categories", categoryHandler.Create)
 }

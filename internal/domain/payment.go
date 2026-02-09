@@ -1,0 +1,38 @@
+package domain
+
+import "time"
+
+type PaymentMethod string
+
+const (
+    PaymentMethodCOD     PaymentMethod = "cod"
+    PaymentMethodRazorpay PaymentMethod = "razorpay"
+    PaymentMethodStripe   PaymentMethod = "stripe"
+    PaymentMethodPaypal   PaymentMethod = "paypal"
+)
+
+type PaymentStatus string
+
+const (
+    PaymentStatusPending PaymentStatus = "pending"
+    PaymentStatusPaid    PaymentStatus = "paid"
+    PaymentStatusFailed  PaymentStatus = "failed"
+    PaymentStatusRefunded PaymentStatus = "refunded"
+)
+
+type Payment struct {
+    ID            uint          `gorm:"primaryKey"`
+    OrderID       uint          `gorm:"not null;index"`
+    PaymentMethod PaymentMethod `gorm:"type:varchar(20);not null"`
+    Amount        float64       `gorm:"not null"`
+    Currency      string        `gorm:"default:'INR'"`
+    Status        PaymentStatus `gorm:"type:varchar(20);not null"`
+
+    GatewayID     string        `gorm:"type:varchar(100)"`
+    GatewayData   string        `gorm:"type:json"`
+    FailureReason string        `gorm:"type:text"`
+
+    PaidAt        *time.Time
+    CreatedAt     time.Time
+    UpdatedAt     time.Time
+}

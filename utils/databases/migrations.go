@@ -16,6 +16,7 @@ func AutoMigrate(db *gorm.DB) {
 		&domain.RefreshToken{}, 
 		&domain.CartItem{},
 		&domain.WishlistItem{},
+		&domain.Payment{},
 	)
 
 	if err != nil {

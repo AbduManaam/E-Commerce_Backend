@@ -1,4 +1,3 @@
-
 package app
 
 import (
@@ -14,27 +13,34 @@ import (
 )
 
 type Container struct {
-
+	// Repositories
 	UserRepo repository.UserRepository
 
+	// Handlers
+	AuthHandler     *handler.AuthHandler
 	UserHandler     *handler.UserHandler
 	AdminHandler    *handler.AdminUserHandler
-	AuthHandler     *handler.AuthHandler
 	ProductHandler  *handler.ProductHandler
 	OrderHandler    *handler.OrderHandler
 	CartHandler     *handler.CartHandler
 	WishlistHandler *handler.WishlistHandler
-    CategoryHandler *handler.CategoryHandler
-
+	CategoryHandler *handler.CategoryHandler
+	AddressHandler  *handler.AddressHandler // ✅ ADDED
+	PaymentHandler  *handler.PaymentHandler
 
 	DBCleanup func() error
 }
 
 func BuildContainer(cfg *config.AppConfig) (*Container, error) {
-
+	// ------------------------------------------------
+	// Logger
+	// ------------------------------------------------
 	logging.Init(cfg.Environment)
 	logger := logging.Logger
 
+	// ------------------------------------------------
+	// Database
+	// ------------------------------------------------
 	db := databases.NewPostgresDB(
 		cfg.Database.Host,
 		cfg.Database.User,
@@ -50,30 +56,36 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	}
 
 	databases.AutoMigrate(db)
+
 	repoLogger := log.New(os.Stdout, "[SERVICE] ", log.LstdFlags|log.Lshortfile)
 
-
+	// ------------------------------------------------
+	// Repositories
+	// ------------------------------------------------
 	authRepo := repository.NewAuthRepository(db)
 	userRepo := repository.NewUserRepository(db, logger)
 	productRepo := repository.NewProductRepository(db, logger)
 	orderRepo := repository.NewOrderRepository(db, logger)
-	// cartRepo := repository.NewCartRepository(db, logger)
 	wishlistRepo := repository.NewWishlistRepository(db, logger)
+	categoryRepo := repository.NewCategoryRepository(db)
+	addressRepo := repository.NewAddressRepository(db) // ✅ ADDED
+	paymentRepo := repository.NewPaymentRepository(db)
 
-	categoryRepo:= repository.NewCategoryRepository(db)
-	categorySvc := service.NewCategoryService(categoryRepo)
-    categoryHandler := handler.NewCategoryHandler(categorySvc)
+	var cartRepo repository.CartRepositoryInterface =
+		repository.NewCartRepository(db, logger)
 
-     var cartRepo repository.CartRepositoryInterface = repository.NewCartRepository(db, logger)
+	var productReader repository.ProductReader = productRepo
+	var productWriter repository.ProductWriter = productRepo
 
-     var productReader repository.ProductReader = productRepo
-     var productWriter repository.ProductWriter = productRepo
-
+	// ------------------------------------------------
 	// Email
+	// ------------------------------------------------
 	email.Init(cfg.SMTP)
 	emailSvc := email.NewSMTPService()
 
+	// ------------------------------------------------
 	// Services
+	// ------------------------------------------------
 	authSvc := service.NewAuthService(
 		userRepo,
 		authRepo,
@@ -81,42 +93,71 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 		emailSvc,
 	)
 
-	userSvc := service.NewUserService(userRepo,logger)
-	productSvc := service.NewProductService(productRepo,logger)
+	userSvc := service.NewUserService(userRepo, logger)
+	productSvc := service.NewProductService(productRepo, logger)
 
 	orderSvc := service.NewOrderService(
-	orderRepo,
-	productReader,
-	productWriter,
-	cartRepo,
-	repoLogger,
-)
+		orderRepo,
+		productReader,
+		productWriter,
+		cartRepo,
+		repoLogger,
+	)
 
 	cartSvc := service.NewCartService(
 		cartRepo,
 		productReader,
-	    productWriter,
+		productWriter,
 		repoLogger,
 	)
 
 	wishlistSvc := service.NewWishlistService(
-	wishlistRepo,
-	productReader,
-	repoLogger,
-)
+		wishlistRepo,
+		productReader,
+		repoLogger,
+	)
 
+	categorySvc := service.NewCategoryService(categoryRepo)
+
+	addressSvc := service.NewAddressService(addressRepo) // ✅ ADDED
+
+	paymentSvc := service.NewPaymentService(
+		paymentRepo,
+		orderRepo,
+		repoLogger,
+	)
+
+	// ------------------------------------------------
 	// Handlers
-	return &Container{
+	// ------------------------------------------------
+	authHandler := handler.NewAuthHandler(authSvc)
+	userHandler := handler.NewUserHandler(userSvc)
+	adminHandler := handler.NewAdminUserHandler(userSvc, orderSvc)
+	productHandler := handler.NewProductHandler(productSvc)
+	orderHandler := handler.NewOrderHandler(orderSvc)
+	cartHandler := handler.NewCartHandler(cartSvc)
+	wishlistHandler := handler.NewWishlistHandler(wishlistSvc)
+	categoryHandler := handler.NewCategoryHandler(categorySvc)
+	addressHandler := handler.NewAddressHandler(addressSvc) // ✅ ADDED
+	paymentHandler := handler.NewPaymentHandler(paymentSvc)
 
+	// ------------------------------------------------
+	// Container
+	// ------------------------------------------------
+	return &Container{
 		UserRepo: userRepo,
-		AuthHandler:     handler.NewAuthHandler(authSvc),
-		AdminHandler:    handler.NewAdminUserHandler(userSvc,orderSvc),
-		UserHandler:     handler.NewUserHandler(userSvc),
-		ProductHandler:  handler.NewProductHandler(productSvc),
-		OrderHandler:    handler.NewOrderHandler(orderSvc),
-		CartHandler:     handler.NewCartHandler(cartSvc),
-		WishlistHandler: handler.NewWishlistHandler(wishlistSvc),
-        CategoryHandler: categoryHandler, 
-		DBCleanup:       sqlDB.Close,
+
+		AuthHandler:     authHandler,
+		UserHandler:     userHandler,
+		AdminHandler:    adminHandler,
+		ProductHandler:  productHandler,
+		OrderHandler:    orderHandler,
+		CartHandler:     cartHandler,
+		WishlistHandler: wishlistHandler,
+		CategoryHandler: categoryHandler,
+		AddressHandler:  addressHandler, // ✅ ADDED
+		PaymentHandler:  paymentHandler,
+
+		DBCleanup: sqlDB.Close,
 	}, nil
 }

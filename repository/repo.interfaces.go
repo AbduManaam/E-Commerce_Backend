@@ -67,7 +67,17 @@ type CartRepositoryInterface interface {
 }
 
 type AddressRepository interface {
-    Create(address *domain.Address) error
-    ListByUser(userID uint) ([]domain.Address, error)
-    UnsetDefaultExcept(userID, addressID uint) error
+	Create(address *domain.Address) error
+	ListByUser(userID uint) ([]domain.Address, error)
+	GetByID(userID, addressID uint) (*domain.Address, error)
+	Update(address *domain.Address) error
+	Delete(userID, addressID uint) error
+	UnsetDefaultExcept(userID, addressID uint) error
 }
+type PaymentRepository interface {
+    Create(payment *domain.Payment) error
+    GetByID(id uint) (*domain.Payment, error)
+    GetByOrderID(orderID uint) (*domain.Payment, error)
+    Update(payment *domain.Payment) error
+}
+
