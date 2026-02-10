@@ -68,7 +68,7 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	orderRepo := repository.NewOrderRepository(db, logger)
 	wishlistRepo := repository.NewWishlistRepository(db, logger)
 	categoryRepo := repository.NewCategoryRepository(db)
-	addressRepo := repository.NewAddressRepository(db) // ✅ ADDED
+	addressRepo := repository.NewAddressRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
 
 	var cartRepo repository.CartRepositoryInterface =
@@ -101,6 +101,7 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 		productReader,
 		productWriter,
 		cartRepo,
+		addressRepo,
 		repoLogger,
 	)
 
@@ -119,7 +120,7 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 
 	categorySvc := service.NewCategoryService(categoryRepo)
 
-	addressSvc := service.NewAddressService(addressRepo) // ✅ ADDED
+	addressSvc := service.NewAddressService(addressRepo)
 
 	paymentSvc := service.NewPaymentService(
 		paymentRepo,

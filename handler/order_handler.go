@@ -21,41 +21,118 @@ func NewOrderHandler(orderSvc *service.OrderService) *OrderHandler {
 }
 
 func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
-	userIDAny := c.Locals("userID")
-	userID, ok := userIDAny.(uint)
-	if !ok {
-		logging.LogWarn("unauthorized create order attempt", c, fiber.ErrUnauthorized)
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
-	}
+    logging.LogInfo("CreateOrder endpoint hit", c, 
+        "path", c.Path(),
+        "method", c.Method(),
+    )
+    
+    userIDAny := c.Locals("userID")
+    userID, ok := userIDAny.(uint)
+    if !ok {
+        return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
+    }
 
-	var req dto.CreateOrderRequest
-	if err := c.BodyParser(&req); err != nil {
-		logging.LogWarn("invalid create order request: body parse failed", c, err, "userID", userID)
-		return HandleError(c, service.ErrInvalidInput)
-	}
+    var req dto.CreateOrderRequest
+    if err := c.BodyParser(&req); err != nil {
+        logging.LogWarn("invalid create order request: body parse failed", c, err, 
+            "userID", userID, 
+            "body", string(c.Body()),
+        )
+        return HandleError(c, service.ErrInvalidInput.WithContext("invalid request body"))
+    }
 
-	if err := validator.Validate.Struct(req); err != nil {
-		logging.LogWarn("invalid create order request: validation failed", c, err, "userID", userID)
-		return c.Status(400).JSON(fiber.Map{
-			"errors": validator.FormatErrors(err),
-		})
-	}
+    // Validate request
+    if err := validator.Validate.Struct(req); err != nil {
+        return c.Status(400).JSON(fiber.Map{
+            "errors": validator.FormatErrors(err),
+        })
+    }
 
-	order, err := h.orderSvc.CreateOrder(
-		userID,
-		req.AddressID,
-		req.PaymentMethod,
-	)
+    // Validate based on order type
+    if req.OrderType == "direct" && len(req.Items) == 0 {
+        return c.Status(400).JSON(fiber.Map{
+            "error": "Items are required for direct orders",
+        })
+    }
+
+    // Call service
+    var order *domain.Order
+    var err error
+
+    if req.OrderType == "cart" {
+        // Cart-based order (uses items from user's cart)
+        logging.LogInfo("creating cart-based order", c, "userID", userID)
+        order, err = h.orderSvc.CreateOrderFromCart(
+            userID,
+            req.AddressID,
+            req.PaymentMethod,
+        )
+    } else if req.OrderType == "direct" {
+        // Direct order (items specified in request)
+        logging.LogInfo("creating direct order", c, "userID", userID, "items_count", len(req.Items))
+        order, err = h.orderSvc.CreateDirectOrder(
+            userID,
+            req.AddressID,
+            req.PaymentMethod,
+            req.Items,
+        )
+    }
+
+    if err != nil {
+        logging.LogWarn("create order failed", c, err, "userID", userID, "order_type", req.OrderType)
+        return HandleError(c, err)
+    }
+
+    logging.LogInfo("order created successfully", c, 
+        "userID", userID, 
+        "orderID", order.ID,
+        "order_type", req.OrderType,
+        "items_count", len(order.Items),
+    )
+
+    return c.Status(201).JSON(fiber.Map{
+        "message": "Order created successfully",
+        "order": order,
+    })
+}
+
+
+// func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
+// 	userIDAny := c.Locals("userID")
+// 	userID, ok := userIDAny.(uint)
+// 	if !ok {
+// 		logging.LogWarn("unauthorized create order attempt", c, fiber.ErrUnauthorized)
+// 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+// 	}
+
+// 	var req dto.CreateOrderRequest
+// 	if err := c.BodyParser(&req); err != nil {
+// 		logging.LogWarn("invalid create order request: body parse failed", c, err, "userID", userID)
+// 		return HandleError(c, service.ErrInvalidInput)
+// 	}
+
+// 	if err := validator.Validate.Struct(req); err != nil {
+// 		logging.LogWarn("invalid create order request: validation failed", c, err, "userID", userID)
+// 		return c.Status(400).JSON(fiber.Map{
+// 			"errors": validator.FormatErrors(err),
+// 		})
+// 	}
+
+// 	order, err := h.orderSvc.CreateOrder(
+// 		userID,
+// 		req.AddressID,
+// 		req.PaymentMethod,
+// 	)
 
 	
-	if err != nil {
-		logging.LogWarn("create order failed: service error", c, err, "userID", userID)
-		return HandleError(c, err)
-	}
+// 	if err != nil {
+// 		logging.LogWarn("create order failed: service error", c, err, "userID", userID)
+// 		return HandleError(c, err)
+// 	}
 
-	logging.LogInfo("order created successfully", c, "userID", userID, "orderID", order.ID)
-	return c.Status(fiber.StatusCreated).JSON(order)
-}
+// 	logging.LogInfo("order created successfully", c, "userID", userID, "orderID", order.ID)
+// 	return c.Status(fiber.StatusCreated).JSON(order)
+// }
 
 func (h *OrderHandler) GetUserOrders(c *fiber.Ctx) error {
 	userIDAny := c.Locals("userID")

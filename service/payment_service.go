@@ -3,6 +3,7 @@ package service
 import (
 	"backend/internal/domain"
 	"backend/repository"
+	"encoding/json"
 	"errors"
 	"log"
 	"time"
@@ -52,9 +53,11 @@ func (s *PaymentService) CreatePaymentIntent(
 	payment := &domain.Payment{
 		OrderID:       orderID,
 		PaymentMethod: method,
+		// PaymentMethod: domain.PaymentMethod(req.PaymentMethod),
 		Amount:        order.FinalTotal,
 		Currency:      "INR",
 		Status:        domain.PaymentStatusPending,
+		GatewayData:   json.RawMessage(`{}`),
 	}
 
 	if err := s.paymentRepo.Create(payment); err != nil {

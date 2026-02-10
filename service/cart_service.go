@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 )
 
 type CartService struct {
@@ -149,30 +150,79 @@ func (s *CartService) GetCart(userID uint) (*domain.Cart, error) {
 		s.logger.Printf("GetCart failed: userID=%d err=%v", userID, err)
 		return nil, err
 	}
+	now := time.Now()
+	for i := range cart.Items {
+		if cart.Items[i].Product.ID != 0 {
+			cart.Items[i].Product.FinalPrice = cart.Items[i].Product.CalculatePrice(now)
+		}
+	}
 	return cart, nil
 }
 
+
+
 func (s *CartService) UpdateItem(userID, itemID uint, qty uint) error {
-	if qty == 0 {
-		s.logger.Printf("UpdateItem failed: qty=0 userID=%d itemID=%d", userID, itemID)
-		return errors.New("quantity must be greater than zero")
+	// Validate quantity
+	if qty == 0 || qty > domain.MaxQuantityPerProduct {
+		s.logger.Printf(
+			"UpdateItem failed: invalid quantity userID=%d itemID=%d qty=%d",
+			userID, itemID, qty,
+		)
+		return &ServiceError{
+			Code: "INVALID_QUANTITY",
+			Msg:  fmt.Sprintf("Quantity must be between 1 and %d", domain.MaxQuantityPerProduct),
+		}
 	}
 
+	// Get or create cart
 	cart, err := s.cartRepo.GetorCreateCart(userID)
 	if err != nil {
 		s.logger.Printf("UpdateItem failed: get cart userID=%d err=%v", userID, err)
 		return err
 	}
 
+	// Find cart item
 	item, err := s.cartRepo.FindItem(cart.ID, itemID)
 	if err != nil {
 		s.logger.Printf(
 			"UpdateItem failed: item not found userID=%d itemID=%d err=%v",
 			userID, itemID, err,
 		)
-		return errors.New("cart item not found")
+		return &ServiceError{Code: "ITEM_NOT_FOUND", Msg: "Cart item not found"}
 	}
 
+	// Fetch product for stock check
+	product, err := s.productReader.GetByID(item.ProductID)
+	if err != nil || product == nil {
+		s.logger.Printf(
+			"UpdateItem failed: product not found userID=%d productID=%d err=%v",
+			userID, item.ProductID, err,
+		)
+		return &ServiceError{Code: "PRODUCT_NOT_FOUND", Msg: "Product not found"}
+	}
+
+	// Check product availability
+	if !product.IsActive || product.Stock <= 0 {
+		s.logger.Printf(
+			"UpdateItem failed: product unavailable userID=%d productID=%d active=%v stock=%d",
+			userID, item.ProductID, product.IsActive, product.Stock,
+		)
+		return &ServiceError{Code: "PRODUCT_UNAVAILABLE", Msg: "Product unavailable"}
+	}
+
+	// Check stock
+	if uint(product.Stock) < qty {
+		s.logger.Printf(
+			"UpdateItem failed: insufficient stock userID=%d productID=%d requested=%d available=%d",
+			userID, item.ProductID, qty, product.Stock,
+		)
+		return &ServiceError{
+			Code: "INSUFFICIENT_STOCK",
+			Msg:  fmt.Sprintf("Only %d items available", product.Stock),
+		}
+	}
+
+	// Update quantity and save
 	item.Quantity = qty
 	if err := s.cartRepo.Save(item); err != nil {
 		s.logger.Printf(
@@ -182,8 +232,14 @@ func (s *CartService) UpdateItem(userID, itemID uint, qty uint) error {
 		return err
 	}
 
+	s.logger.Printf(
+		"UpdateItem succeeded: userID=%d itemID=%d newQty=%d",
+		userID, itemID, qty,
+	)
 	return nil
 }
+
+
 
 func (s *CartService) RemoveItem(userID, itemID uint) error {
 	cart, err := s.cartRepo.GetorCreateCart(userID)

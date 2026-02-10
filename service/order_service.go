@@ -1,6 +1,7 @@
 package service
 
 import (
+	"backend/handler/dto"
 	"backend/internal/domain"
 	"backend/repository"
 	"errors"
@@ -13,6 +14,7 @@ type OrderService struct {
 	productRead  repository.ProductReader
 	productWrite repository.ProductWriter
 	cartRepo     repository.CartRepositoryInterface
+	addressRepo  repository.AddressRepository 
 	logger       *log.Logger
 	
 }
@@ -22,6 +24,7 @@ func NewOrderService(
 	productRead repository.ProductReader,
 	productWrite repository.ProductWriter,
 	cartRepo repository.CartRepositoryInterface,
+	addressRepo repository.AddressRepository,
 	logger *log.Logger,
 ) *OrderService {
 	return &OrderService{
@@ -29,10 +32,10 @@ func NewOrderService(
 		productRead:  productRead,
 		productWrite: productWrite,
 		cartRepo:     cartRepo,
+		addressRepo:  addressRepo,
 		logger:       logger,
 	}
 }
-
 func (s *OrderService) CreateOrder(
 	userID uint,
 	addressID uint,
@@ -46,7 +49,31 @@ func (s *OrderService) CreateOrder(
 		}
 	}()
 
-	// 1. Get cart
+	// ✅ Step 1: Fetch user address
+	address, err := s.addressRepo.GetByID(userID, addressID)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	// ✅ Step 2: Convert Address → OrderAddress (SNAPSHOT)
+	orderAddress := &domain.OrderAddress{
+		FullName: address.FullName,
+		Phone:    address.Phone,
+		Address:  address.Address,
+		City:     address.City,
+		State:    address.State,
+		Country:  address.Country,
+		ZipCode:  address.ZipCode,
+		Landmark: address.Landmark,
+	}
+
+	if err := tx.Create(orderAddress).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	// 3️⃣ Get cart (locked)
 	cart, err := s.cartRepo.GetForUpdate(tx, userID)
 	if err != nil {
 		tx.Rollback()
@@ -65,45 +92,37 @@ func (s *OrderService) CreateOrder(
 		now           = time.Now()
 	)
 
-	// 2. Process each cart item
+	// 4️⃣ Process cart items
 	for _, ci := range cart.Items {
-
 		product, err := s.productRead.GetByIDForUpdate(tx, ci.ProductID)
 		if err != nil {
 			tx.Rollback()
 			return nil, ErrProductNotFound
 		}
 
-		if !product.IsActive || product.Stock <= 0 {
+		if !product.IsActive || product.Stock < int(ci.Quantity) {
 			tx.Rollback()
 			return nil, ErrProductUnavailable
 		}
 
-		if product.Stock < int(ci.Quantity) {
-			tx.Rollback()
-			return nil, ErrInsufficientStock
-		}
-
 		unitPrice := product.Price
 		finalPrice := product.CalculatePrice(now)
-		discountPerUnit := unitPrice - finalPrice
-
+		discount := unitPrice - finalPrice
 		subtotal := finalPrice * float64(ci.Quantity)
 
 		orderItems = append(orderItems, domain.OrderItem{
 			ProductID:       product.ID,
 			Quantity:        ci.Quantity,
 			Price:           unitPrice,
-			DiscountPercent: discountPerUnit,
+			DiscountAmount:  discount,
 			FinalPrice:      finalPrice,
 			Subtotal:        subtotal,
 			Status:          domain.OrderItemStatusPending,
 		})
 
 		total += unitPrice * float64(ci.Quantity)
-		totalDiscount += discountPerUnit * float64(ci.Quantity)
+		totalDiscount += discount * float64(ci.Quantity)
 
-		// Reduce stock
 		product.Stock -= int(ci.Quantity)
 		if err := s.productWrite.UpdateTx(tx, product); err != nil {
 			tx.Rollback()
@@ -111,7 +130,7 @@ func (s *OrderService) CreateOrder(
 		}
 	}
 
-	// 3. Create order
+	// 5️⃣ Create order (VALID FK)
 	order := &domain.Order{
 		UserID:            userID,
 		Items:             orderItems,
@@ -119,7 +138,7 @@ func (s *OrderService) CreateOrder(
 		Discount:          totalDiscount,
 		FinalTotal:        total - totalDiscount,
 		Status:            domain.OrderStatusPending,
-		ShippingAddressID: &addressID,
+		ShippingAddressID: &orderAddress.ID,
 		PaymentMethod:     paymentMethod,
 		PaymentStatus:     domain.PaymentStatusPending,
 	}
@@ -129,19 +148,19 @@ func (s *OrderService) CreateOrder(
 		return nil, err
 	}
 
-	// 4. Clear cart
+	// 6️⃣ Clear cart
 	if err := s.cartRepo.ClearTx(tx, userID); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
 
-	// 5. Commit
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
 
 	return order, nil
 }
+
 
 func (s *OrderService) GetUserOrders(userID uint) ([]domain.Order, error) {
 	if userID == 0 {
@@ -398,3 +417,114 @@ func (s *OrderService) GetOrderDetail(orderID uint) (*domain.Order, error) {
 	return order, nil
 }
 
+
+
+
+// CreateOrderFromCart - Creates order from user's cart
+func (s *OrderService) CreateOrderFromCart(
+    userID uint,
+    addressID uint,
+    paymentMethod domain.PaymentMethod,
+) (*domain.Order, error) {
+    // Your existing cart-based order logic
+    return s.CreateOrder(userID, addressID, paymentMethod)
+}
+func (s *OrderService) CreateDirectOrder(
+	userID uint,
+	addressID uint,
+	paymentMethod domain.PaymentMethod,
+	items []dto.OrderItemRequest,
+) (*domain.Order, error) {
+
+	tx := s.orderRepo.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// ✅ Address → OrderAddress
+	address, err := s.addressRepo.GetByID(userID, addressID)
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	orderAddress := &domain.OrderAddress{
+		FullName: address.FullName,
+		Phone:    address.Phone,
+		Address:  address.Address,
+		City:     address.City,
+		State:    address.State,
+		Country:  address.Country,
+		ZipCode:  address.ZipCode,
+		Landmark: address.Landmark,
+	}
+
+	if err := tx.Create(orderAddress).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	var (
+		orderItems    []domain.OrderItem
+		total         float64
+		totalDiscount float64
+		now           = time.Now()
+	)
+
+	for _, req := range items {
+		product, err := s.productRead.GetByIDForUpdate(tx, req.ProductID)
+		if err != nil {
+			tx.Rollback()
+			return nil, ErrProductNotFound
+		}
+
+		unitPrice := product.Price
+		finalPrice := product.CalculatePrice(now)
+		discount := unitPrice - finalPrice
+		subtotal := finalPrice * float64(req.Quantity)
+
+		orderItems = append(orderItems, domain.OrderItem{
+			ProductID:       product.ID,
+			Quantity:        req.Quantity,
+			Price:           unitPrice,
+			DiscountAmount:  discount,
+			FinalPrice:      finalPrice,
+			Subtotal:        subtotal,
+			Status:          domain.OrderItemStatusPending,
+		})
+
+		total += unitPrice * float64(req.Quantity)
+		totalDiscount += discount * float64(req.Quantity)
+
+		product.Stock -= int(req.Quantity)
+		if err := s.productWrite.UpdateTx(tx, product); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+
+	order := &domain.Order{
+		UserID:            userID,
+		Items:             orderItems,
+		Total:             total,
+		Discount:          totalDiscount,
+		FinalTotal:        total - totalDiscount,
+		Status:            domain.OrderStatusPending,
+		ShippingAddressID: &orderAddress.ID,
+		PaymentMethod:     paymentMethod,
+		PaymentStatus:     domain.PaymentStatusPending,
+	}
+
+	if err := s.orderRepo.CreateTx(tx, order); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+
+	return order, nil
+}

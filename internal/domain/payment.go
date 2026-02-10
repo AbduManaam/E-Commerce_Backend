@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type PaymentMethod string
 
@@ -29,7 +32,7 @@ type Payment struct {
     Status        PaymentStatus `gorm:"type:varchar(20);not null"`
 
     GatewayID     string        `gorm:"type:varchar(100)"`
-    GatewayData   string        `gorm:"type:json"`
+    GatewayData   json.RawMessage `gorm:"type:jsonb;default:'{}'"`
     FailureReason string        `gorm:"type:text"`
 
     PaidAt        *time.Time

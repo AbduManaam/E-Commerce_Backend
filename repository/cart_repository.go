@@ -30,7 +30,7 @@ func (r *cartRepository) GetorCreateCart(userID uint) (*domain.Cart, error) {
 
 	err := r.db.
 		Where("user_id = ?", userID).
-		Preload("Items").
+		Preload("Items.Product.Category").
 		First(&cart).Error
 
 	if err != nil {
@@ -147,6 +147,19 @@ func (r *cartRepository) GetForUpdate(
 		Error
 
 	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			r.logger.Info(
+				"cart not found for update, treating as empty cart",
+				"user_id", userID,
+			)
+
+			// IMPORTANT: return empty cart, not error
+			return &domain.Cart{
+				UserID: userID,
+				Items:  []domain.CartItem{},
+			}, nil
+		}
+
 		r.logger.Error(
 			"cart get for update failed",
 			"user_id", userID,

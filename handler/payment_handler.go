@@ -17,7 +17,8 @@ func NewPaymentHandler(paymentSvc *service.PaymentService) *PaymentHandler {
 
 type CreatePaymentRequest struct {
 	OrderID uint                 `json:"order_id"`
-	Method  domain.PaymentMethod `json:"method"`
+	// Method  domain.PaymentMethod `json:"method"`
+	Method  string `json:"method"`
 }
 
 func (h *PaymentHandler) CreatePaymentIntent(c *fiber.Ctx) error {
@@ -26,7 +27,7 @@ func (h *PaymentHandler) CreatePaymentIntent(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	payment, secret, err := h.paymentSvc.CreatePaymentIntent(req.OrderID, req.Method)
+	payment, secret, err := h.paymentSvc.CreatePaymentIntent(req.OrderID, domain.PaymentMethod(req.Method))
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}
