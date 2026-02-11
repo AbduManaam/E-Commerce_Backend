@@ -36,6 +36,8 @@ func NewOrderService(
 		logger:       logger,
 	}
 }
+
+
 func (s *OrderService) CreateOrder(
 	userID uint,
 	addressID uint,
@@ -157,8 +159,15 @@ func (s *OrderService) CreateOrder(
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
+	// After tx.Commit().Error
+fullOrder, err := s.orderRepo.GetByIDWithAssociations(order.ID)
+if err != nil {
+    return nil, err
+}
 
-	return order, nil
+return fullOrder, nil
+
+
 }
 
 
@@ -420,15 +429,15 @@ func (s *OrderService) GetOrderDetail(orderID uint) (*domain.Order, error) {
 
 
 
-// CreateOrderFromCart - Creates order from user's cart
 func (s *OrderService) CreateOrderFromCart(
-    userID uint,
-    addressID uint,
-    paymentMethod domain.PaymentMethod,
+	userID uint,
+	addressID uint,
+	paymentMethod domain.PaymentMethod,
 ) (*domain.Order, error) {
-    // Your existing cart-based order logic
-    return s.CreateOrder(userID, addressID, paymentMethod)
+	// Use your CreateOrder service, which now reloads associations
+	return s.CreateOrder(userID, addressID, paymentMethod)
 }
+
 func (s *OrderService) CreateDirectOrder(
 	userID uint,
 	addressID uint,
@@ -443,7 +452,7 @@ func (s *OrderService) CreateDirectOrder(
 		}
 	}()
 
-	// ✅ Address → OrderAddress
+	// Address → OrderAddress
 	address, err := s.addressRepo.GetByID(userID, addressID)
 	if err != nil {
 		tx.Rollback()
@@ -526,5 +535,13 @@ func (s *OrderService) CreateDirectOrder(
 		return nil, err
 	}
 
-	return order, nil
+	// -------------------------
+	// Reload with associations
+	// -------------------------
+	fullOrder, err := s.orderRepo.GetByIDWithAssociations(order.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return fullOrder, nil
 }

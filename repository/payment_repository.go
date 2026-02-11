@@ -37,3 +37,11 @@ func (r *paymentRepository) GetByOrderID(orderID uint) (*domain.Payment, error) 
 func (r *paymentRepository) Update(payment *domain.Payment) error {
 	return r.db.Save(payment).Error
 }
+
+func (r *paymentRepository) GetByGatewayID(gatewayID string) (*domain.Payment, error) {
+    var payment domain.Payment
+    if err := r.db.Where("gateway_id = ?", gatewayID).First(&payment).Error; err != nil {
+        return nil, err
+    }
+    return &payment, nil
+}

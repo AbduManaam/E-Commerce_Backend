@@ -25,7 +25,7 @@ type Container struct {
 	CartHandler     *handler.CartHandler
 	WishlistHandler *handler.WishlistHandler
 	CategoryHandler *handler.CategoryHandler
-	AddressHandler  *handler.AddressHandler // ✅ ADDED
+	AddressHandler  *handler.AddressHandler 
 	PaymentHandler  *handler.PaymentHandler
 
 	DBCleanup func() error

@@ -48,6 +48,7 @@ type OrderRepository interface {
     UpdateTx(tx *gorm.DB, order *domain.Order) error 
 	GetOrdersByUserIDPaginated(userID uint, offset, limit int) ([]domain.Order, error)
     CountOrdersByUserID(userID uint) (int64, error)
+	GetByIDWithAssociations(id uint) (*domain.Order, error)
 }
 
 type WishlistRepositoryInterface interface {
@@ -79,5 +80,6 @@ type PaymentRepository interface {
     GetByID(id uint) (*domain.Payment, error)
     GetByOrderID(orderID uint) (*domain.Payment, error)
     Update(payment *domain.Payment) error
+	 GetByGatewayID(gatewayID string) (*domain.Payment, error) 
 }
 

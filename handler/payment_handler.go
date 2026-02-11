@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"backend/handler/dto"
 	"backend/internal/domain"
 	"backend/service"
+	"backend/utils/logging"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -16,8 +19,7 @@ func NewPaymentHandler(paymentSvc *service.PaymentService) *PaymentHandler {
 }
 
 type CreatePaymentRequest struct {
-	OrderID uint                 `json:"order_id"`
-	// Method  domain.PaymentMethod `json:"method"`
+	OrderID uint   `json:"order_id"`
 	Method  string `json:"method"`
 }
 
@@ -27,7 +29,18 @@ func (h *PaymentHandler) CreatePaymentIntent(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	payment, secret, err := h.paymentSvc.CreatePaymentIntent(req.OrderID, domain.PaymentMethod(req.Method))
+	// Normalize method: lowercase + trim spaces
+	method := domain.PaymentMethod(strings.ToLower(strings.TrimSpace(req.Method)))
+
+	// Validate supported methods
+	switch method {
+	case domain.PaymentMethodCOD, domain.PaymentMethodRazorpay, domain.PaymentMethodStripe:
+		// ok
+	default:
+		return c.Status(400).JSON(fiber.Map{"error": "unsupported payment method"})
+	}
+
+	payment, secret, err := h.paymentSvc.CreatePaymentIntent(req.OrderID, method)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -36,4 +49,31 @@ func (h *PaymentHandler) CreatePaymentIntent(c *fiber.Ctx) error {
 		"payment":       payment,
 		"client_secret": secret,
 	})
+}
+
+
+func (h *PaymentHandler) ConfirmPayment(c *fiber.Ctx) error {
+    var req dto.ConfirmPaymentRequest
+    if err := c.BodyParser(&req); err != nil {
+        logging.LogWarn("invalid request body", c, err)
+        return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
+    }
+
+    payment, err := h.paymentSvc.ConfirmPayment(req.PaymentID, req.Status)
+    if err != nil {
+        logging.LogWarn("failed to confirm payment", c, err)
+        return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+    }
+
+    logging.LogInfo("payment confirmed successfully", c, "payment_id", payment.GatewayID, "status", payment.Status)
+
+    res := dto.ConfirmPaymentResponse{
+        PaymentID: payment.GatewayID,
+        Status:    string(payment.Status),
+        PaidAt:    payment.PaidAt,
+        Amount:    int64(payment.Amount),
+        Message:   "Payment confirmed successfully",
+    }
+
+    return c.JSON(res)
 }

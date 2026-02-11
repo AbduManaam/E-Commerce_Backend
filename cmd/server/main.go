@@ -4,8 +4,9 @@ import (
 	"backend/app"
 	"backend/config"
 	"backend/utils/logging"
+	"log"
 	"os"
-
+	"time"
 )
 
 func main() {
@@ -23,6 +24,10 @@ func main() {
 		logging.Logger.Error("config loading failed", "error", err.Error())
 		os.Exit(1)
 	}
+
+	log.Printf("Server local time: %v", time.Now())
+log.Printf("Server UTC time:   %v", time.Now().UTC())
+
 
 	server, cleanup := app.NewServer(cfg)
 	defer cleanup()

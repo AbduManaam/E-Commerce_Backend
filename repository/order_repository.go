@@ -63,23 +63,21 @@ func (r *orderRepository) Create(order *domain.Order) error {
 }
 
 func (r *orderRepository) GetByID(id uint) (*domain.Order, error) {
-	var order domain.Order
+    var order domain.Order
 
-	err := r.db.
-		Preload("Items").
-		First(&order, id).Error
+    err := r.db.
+        Preload("Items.Product.Category").
+        Preload("ShippingAddress").
+        First(&order, id).Error
 
-	if err != nil {
-		r.logger.Error(
-			"order get by id failed",
-			"order_id", id,
-			"err", err,
-		)
-		return nil, err
-	}
+    if err != nil {
+        r.logger.Error("order get by id failed", "order_id", id, "err", err)
+        return nil, err
+    }
 
-	return &order, nil
+    return &order, nil
 }
+
 
 // ------------------------------------------------------------
 
@@ -293,4 +291,16 @@ func (r *orderRepository) UpdateOrderItemTx(tx *gorm.DB, item *domain.OrderItem)
 
 func (r *orderRepository) UpdateTx(tx *gorm.DB, order *domain.Order) error {
     return tx.Save(order).Error
+}
+
+func (r *orderRepository) CreateOrder(order *domain.Order) error {
+    return r.db.Create(order).Error
+}
+
+func (r *orderRepository) GetByIDWithAssociations(id uint) (*domain.Order, error) {
+    var order domain.Order
+    err := r.db.Preload("Items.Product").
+                 Preload("ShippingAddress").
+                 First(&order, id).Error
+    return &order, err
 }
