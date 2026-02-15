@@ -266,7 +266,8 @@ func (s *AuthService) RefreshToken(refreshToken string) (string, string, error) 
     }
 
     if user.IsBlocked {
-        return "", "", ErrUserBlocked
+		 _ = s.authRepo.DeleteAllByUserID(user.ID)
+        return "", "", ErrForbidden.WithContext("account suspended")
     }
 
     newAccessToken, err := utils.GenerateAccessToken(

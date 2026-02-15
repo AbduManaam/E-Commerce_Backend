@@ -29,13 +29,10 @@ func (h *PaymentHandler) CreatePaymentIntent(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	// Normalize method: lowercase + trim spaces
 	method := domain.PaymentMethod(strings.ToLower(strings.TrimSpace(req.Method)))
 
-	// Validate supported methods
 	switch method {
 	case domain.PaymentMethodCOD, domain.PaymentMethodRazorpay, domain.PaymentMethodStripe:
-		// ok
 	default:
 		return c.Status(400).JSON(fiber.Map{"error": "unsupported payment method"})
 	}

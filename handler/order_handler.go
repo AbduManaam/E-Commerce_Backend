@@ -41,14 +41,12 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
         return HandleError(c, service.ErrInvalidInput.WithContext("invalid request body"))
     }
 
-    // Validate request
     if err := validator.Validate.Struct(req); err != nil {
         return c.Status(400).JSON(fiber.Map{
             "errors": validator.FormatErrors(err),
         })
     }
 
-    // Validate based on order type
     if req.OrderType == "direct" && len(req.Items) == 0 {
         return c.Status(400).JSON(fiber.Map{
             "error": "Items are required for direct orders",
@@ -60,8 +58,8 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
     var err error
 
     if req.OrderType == "cart" {
-        // Cart-based order (uses items from user's cart)
-        logging.LogInfo("creating cart-based order", c, "userID", userID)
+
+		logging.LogInfo("creating cart-based order", c, "userID", userID)
         order, err = h.orderSvc.CreateOrderFromCart(
             userID,
             req.AddressID,
@@ -235,4 +233,62 @@ func (h *OrderHandler) AdminUpdateOrder(c *fiber.Ctx) error {
 
 	logging.LogInfo("admin updated order successfully", c, "orderID", orderID, "status", req.Status)
 	return c.JSON(fiber.Map{"message": "order status updated successfully"})
+}
+
+func (h *OrderHandler) CancelOrderItem(c *fiber.Ctx) error {
+	userID := c.Locals("userID").(uint)
+
+	orderID, err := strconv.Atoi(c.Params("order_id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid order_id",
+		})
+	}
+
+	itemID, err := strconv.Atoi(c.Params("item_id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid item_id",
+		})
+	}
+
+	var req dto.CancelOrderItemRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	err = h.orderSvc.CancelOrderItem(
+		userID,
+		uint(orderID),
+		uint(itemID),
+		req.Reason,
+	)
+
+	if err != nil {
+		return HandleError(c, err)
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Order item cancelled successfully",
+	})
+}
+
+
+func (h *OrderHandler) ListOrderItems(c *fiber.Ctx) error {
+	userID := c.Locals("userID").(uint)
+
+	orderIDParam := c.Params("order_id")
+	orderID, err := strconv.Atoi(orderIDParam)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+
+	items, err := h.orderSvc.ListOrderItems(uint(orderID), userID)
+	if err != nil {
+		return HandleError(c, err)
+	}
+
+	return c.JSON(items)
 }

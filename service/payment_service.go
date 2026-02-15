@@ -1,20 +1,16 @@
+
+
 package service
 
 import (
 	"backend/internal/domain"
 	"backend/repository"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"gorm.io/gorm"
-)
-
-var (
-	ErrPaymentAlreadyExists = errors.New("payment already exists for this order")
-	ErrOrderNotPayable      = errors.New("order is not payable")
 )
 
 type PaymentService struct {
@@ -35,96 +31,164 @@ func NewPaymentService(
 	}
 }
 
+
+// CreatePaymentIntent remains the same
 func (s *PaymentService) CreatePaymentIntent(
 	orderID uint,
 	method domain.PaymentMethod,
 ) (*domain.Payment, string, error) {
+	// Start a transaction
+	tx := s.paymentRepo.GetDB().Begin()
 
+	// Fetch the order
 	order, err := s.orderRepo.GetByID(orderID)
 	if err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, "", fmt.Errorf("order %d not found", orderID)
+		}
 		return nil, "", err
 	}
 
+	// Check if order is payable
 	if order.Status != domain.OrderStatusPending {
-		return nil, "", ErrOrderNotPayable
+		tx.Rollback()
+		return nil, "", errors.New("order is not payable")
 	}
 
 	// Check if payment already exists
 	if existingPayment, err := s.paymentRepo.GetByOrderID(orderID); err == nil {
-		 log.Printf("Payment already exists: %+v", existingPayment)
-		return nil, "", ErrPaymentAlreadyExists
+		tx.Rollback()
+		s.logger.Printf("Payment already exists: %+v", existingPayment)
+		return nil, "", errors.New("payment already exists for this order")
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		tx.Rollback()
 		return nil, "", err
 	}
 
+	// Create new payment
 	payment := &domain.Payment{
 		OrderID:       orderID,
 		PaymentMethod: method,
 		Amount:        order.FinalTotal,
 		Currency:      "INR",
 		Status:        domain.PaymentStatusPending,
-		GatewayData:   json.RawMessage(`{}`),
 	}
 
-	if err := s.paymentRepo.Create(payment); err != nil {
+	if err := s.paymentRepo.CreateTx(tx, payment); err != nil {
+		tx.Rollback()
 		return nil, "", err
 	}
 
 	var clientSecret string
+	now := time.Now().UTC()
+
 	switch method {
 	case domain.PaymentMethodRazorpay:
 		payment.GatewayID = fmt.Sprintf("razorpay_order_%d", payment.ID)
 		clientSecret = payment.GatewayID
+
 	case domain.PaymentMethodStripe:
 		payment.GatewayID = fmt.Sprintf("stripe_payment_%d", payment.ID)
 		clientSecret = payment.GatewayID
+
 	case domain.PaymentMethodCOD:
-		// For COD, mark as paid immediately
-		now := time.Now().UTC()
+		// COD: mark payment and order as paid immediately
 		payment.Status = domain.PaymentStatusPaid
 		payment.PaidAt = &now
+
+		order.PaymentStatus = domain.PaymentStatusPaid
+		order.PaidAt = &now
+		order.PaymentMethod = method
 	}
 
-	if err := s.paymentRepo.Update(payment); err != nil {
+	// Update payment & order
+	if err := s.paymentRepo.UpdateTx(tx, payment); err != nil {
+		tx.Rollback()
 		return nil, "", err
 	}
 
+	if method == domain.PaymentMethodCOD {
+		if err := s.orderRepo.UpdateTx(tx, order); err != nil {
+			tx.Rollback()
+			return nil, "", err
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		return nil, "", err
+	}
+
+	s.logger.Printf("PaymentIntent created successfully: paymentID=%d, orderID=%d, method=%s", payment.ID, order.ID, method)
 	return payment, clientSecret, nil
 }
 
 
+// ------------------- ConfirmPayment Updated -------------------
 
 func (s *PaymentService) ConfirmPayment(paymentID string, status string) (*domain.Payment, error) {
-    // Fetch payment by GatewayID
-    payment, err := s.paymentRepo.GetByGatewayID(paymentID)
-    if err != nil {
-        s.logger.Printf("ConfirmPayment: payment not found for gatewayID=%s", paymentID)
-        return nil, err
-    }
+	// Start a DB transaction
+	tx := s.paymentRepo.GetDB().Begin() // Assume GetDB() returns *gorm.DB
 
-    // Ignore if already paid
-    if payment.Status == domain.PaymentStatusPaid {
-        s.logger.Printf("ConfirmPayment: payment already marked as paid, paymentID=%d", payment.ID)
-        return payment, nil
-    }
+	payment, err := s.paymentRepo.GetByGatewayID(paymentID)
+	if err != nil {
+		tx.Rollback()
+		s.logger.Printf("ConfirmPayment: payment not found for gatewayID=%s", paymentID)
+		return nil, err
+	}
 
-    now := time.Now().UTC()
-    switch status {
-    case "success":
-        payment.Status = domain.PaymentStatusPaid
-        payment.PaidAt = &now
-        s.logger.Printf("ConfirmPayment: payment success, paymentID=%d, amount=%f", payment.ID, payment.Amount)
-    case "failed":
-        payment.Status = domain.PaymentStatusFailed
-        s.logger.Printf("ConfirmPayment: payment failed, paymentID=%d", payment.ID)
-    default:
-        return nil, errors.New("invalid payment status")
-    }
+	if payment.Status == domain.PaymentStatusPaid {
+		tx.Rollback()
+		s.logger.Printf("ConfirmPayment: payment already marked as paid, paymentID=%d", payment.ID)
+		return payment, nil
+	}
 
-    if err := s.paymentRepo.Update(payment); err != nil {
-        s.logger.Printf("ConfirmPayment: failed to update payment, paymentID=%d, error=%s", payment.ID, err)
-        return nil, err
-    }
+	now := time.Now().UTC()
+	switch status {
+	case "success":
+		payment.Status = domain.PaymentStatusPaid
+		payment.PaidAt = &now
+	case "failed":
+		payment.Status = domain.PaymentStatusFailed
+	default:
+		tx.Rollback()
+		return nil, errors.New("invalid payment status")
+	}
 
-    return payment, nil
+	// Update Payment
+	if err := s.paymentRepo.UpdateTx(tx, payment); err != nil {
+		tx.Rollback()
+		s.logger.Printf("ConfirmPayment: failed to update payment, paymentID=%d, error=%s", payment.ID, err)
+		return nil, err
+	}
+
+	// Update corresponding Order
+	order, err := s.orderRepo.GetByID(payment.OrderID)
+	if err != nil {
+		tx.Rollback()
+		s.logger.Printf("ConfirmPayment: order not found for orderID=%d", payment.OrderID)
+		return nil, err
+	}
+
+	if payment.Status == domain.PaymentStatusPaid {
+		order.PaymentStatus = domain.PaymentStatusPaid
+		order.PaymentMethod = payment.PaymentMethod
+		order.PaidAt = payment.PaidAt
+	}
+
+	if err := s.orderRepo.UpdateTx(tx, order); err != nil {
+		tx.Rollback()
+		s.logger.Printf("ConfirmPayment: failed to update order, orderID=%d, error=%s", order.ID, err)
+		return nil, err
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		s.logger.Printf("ConfirmPayment: failed to commit transaction, paymentID=%d, error=%s", payment.ID, err)
+		return nil, err
+	}
+
+	s.logger.Printf("ConfirmPayment: payment & order updated successfully, paymentID=%d, orderID=%d", payment.ID, order.ID)
+	return payment, nil
 }

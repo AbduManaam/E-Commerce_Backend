@@ -70,7 +70,7 @@ func (s *WishlistService) Get(userID uint) ([]domain.WishlistItem, error) {
 	now := time.Now()
     for i := range items {
         if items[i].Product != nil {
-            items[i].Product.FinalPrice = items[i].Product.CalculatePrice(now)
+            items[i].Product.FinalPrice = items[i].Product.CalculatePrice("H",now)
         }
     }
 

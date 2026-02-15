@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type orderRepository struct {
@@ -303,4 +304,57 @@ func (r *orderRepository) GetByIDWithAssociations(id uint) (*domain.Order, error
                  Preload("ShippingAddress").
                  First(&order, id).Error
     return &order, err
+}
+
+func (r *orderRepository) GetOrderItems(orderID uint) ([]domain.OrderItem, error) {
+	var items []domain.OrderItem
+	err := r.db.
+		Where("order_id = ?", orderID).
+		Preload("Product").
+		Find(&items).Error
+
+	return items, err
+}
+
+func (r *orderRepository) GetOrderByID(orderID uint) (*domain.Order, error) {
+	var order domain.Order
+	err := r.db.First(&order, orderID).Error
+	return &order, err
+}
+
+func (r *orderRepository) UpdateOrder(order *domain.Order) error {
+	return r.db.Save(order).Error
+}
+
+func (r *orderRepository) WithTransaction(
+    fn func(repo OrderRepository) error,
+) error {
+    return r.db.Transaction(func(tx *gorm.DB) error {
+        txRepo := &orderRepository{db: tx}
+        return fn(txRepo)
+    })
+}
+
+func (r *orderRepository) GetByIDForUpdate(tx *gorm.DB, id uint) (*domain.Order, error) {
+	var order domain.Order
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&order, id).Error
+	return &order, err
+}
+
+func (r *orderRepository) GetOrderItemForUpdate(tx *gorm.DB, orderID, itemID uint) (*domain.OrderItem, error) {
+	var item domain.OrderItem
+	err := tx.
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ? AND order_id = ?", itemID, orderID).
+		First(&item).Error
+	return &item, err
+}
+
+func (r *orderRepository) GetOrderItemsTx(tx *gorm.DB, orderID uint) ([]domain.OrderItem, error) {
+	var items []domain.OrderItem
+	err := tx.
+		Where("order_id = ?", orderID).
+		Find(&items).Error
+	return items, err
 }

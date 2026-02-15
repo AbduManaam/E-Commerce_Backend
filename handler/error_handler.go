@@ -25,7 +25,6 @@ func HandleError(c *fiber.Ctx, err error) error {
 		case "USER_EXISTS", "INVALID_INPUT", "PASSWORD_MISMATCH", "OTP_INVALID":
 			status = fiber.StatusBadRequest
 
-		// ---------- CART / PRODUCT ----------
 		case "ITEM_NOT_FOUND", "PRODUCT_NOT_FOUND":
 			status = fiber.StatusNotFound
 		case "INSUFFICIENT_STOCK":
@@ -48,7 +47,7 @@ func HandleError(c *fiber.Ctx, err error) error {
 	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 		"error": fiber.Map{
 			"code":    "INTERNAL_ERROR",
-			"message": err.Error(), // DO NOT hide this during development
+			"message": err.Error(),
 		},
 	})
 }

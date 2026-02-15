@@ -20,3 +20,8 @@ type OrderItemRequest struct {
 	ProductID uint `json:"product_id" validate:"required,gt=0"`
 	Quantity  uint `json:"quantity" validate:"required,gt=0"`
 }
+
+type CancelOrderItemRequest struct {
+	Reason string `json:"reason"`
+}
+

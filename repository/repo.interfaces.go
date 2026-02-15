@@ -28,6 +28,13 @@ type ProductRepository interface {
 
 	GetByIDForUpdate(tx *gorm.DB, id uint) (*domain.Product, error)
 	UpdateTx(tx *gorm.DB, product *domain.Product) error
+	GetNewArrivals(limit int) ([]*dto.Product, error)
+
+	AddImage(productID uint,url string,publicID string,isPrimary bool,)error
+
+	GetImageByID(id uint) (*domain.ProductImage, error)
+    DeleteImage(id uint) error
+
 }
 
 
@@ -49,6 +56,16 @@ type OrderRepository interface {
 	GetOrdersByUserIDPaginated(userID uint, offset, limit int) ([]domain.Order, error)
     CountOrdersByUserID(userID uint) (int64, error)
 	GetByIDWithAssociations(id uint) (*domain.Order, error)
+
+	GetOrderByID(orderID uint) (*domain.Order, error)
+	GetOrderItems(orderID uint) ([]domain.OrderItem, error)
+	UpdateOrder(order *domain.Order) error
+	WithTransaction(fn func(repo OrderRepository) error) error
+
+	GetByIDForUpdate(tx *gorm.DB, id uint) (*domain.Order, error)
+	GetOrderItemForUpdate(tx *gorm.DB, orderID, itemID uint) (*domain.OrderItem, error)
+	GetOrderItemsTx(tx *gorm.DB, orderID uint) ([]domain.OrderItem, error)
+
 }
 
 type WishlistRepositoryInterface interface {
@@ -81,5 +98,22 @@ type PaymentRepository interface {
     GetByOrderID(orderID uint) (*domain.Payment, error)
     Update(payment *domain.Payment) error
 	 GetByGatewayID(gatewayID string) (*domain.Payment, error) 
+	 GetDB() *gorm.DB
+	UpdateTx(tx *gorm.DB, payment *domain.Payment) error
+    CreateTx(tx *gorm.DB, payment *domain.Payment) error
 }
 
+// HOME-----------------------------------
+
+
+type HeroRepository interface {
+	GetHero() (*dto.HeroBanner,error)
+}
+
+type FeatureRepository interface {
+	GetAllFeatures() ([]*dto.Feature, error)
+}
+
+type ReviewRepository interface {
+	GetReviews() ([]*dto.Review, error)
+}

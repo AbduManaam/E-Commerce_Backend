@@ -215,3 +215,61 @@ func (h *CategoryHandler) List(c *fiber.Ctx) error {
 	}
 	return c.JSON(categories)
 }
+
+
+func (h *ProductHandler) UploadImage(c *fiber.Ctx) error {
+	productID, _ := strconv.Atoi(c.Params("id"))
+
+	file, err := c.FormFile("image")
+	if err != nil {
+		return fiber.NewError(400, "Image required")
+	}
+
+	isPrimary := c.FormValue("is_primary") == "true"
+
+	// Upload image and get the created ProductImage
+	img, err := h.productSvc.UploadProductImage(
+		c.Context(),
+		uint(productID),
+		file,
+		isPrimary,
+	)
+	if err != nil {
+		return fiber.NewError(500, err.Error())
+	}
+
+	// Return JSON with uploaded image info
+	return c.JSON(fiber.Map{
+		"message": "Image uploaded successfully",
+		"image": fiber.Map{
+			"url":      img.URL,
+			"publicID": img.PublicID,
+		},
+	})
+}
+
+
+func (h *ProductHandler) DeleteProductImage(c *fiber.Ctx) error {
+
+	idParam := c.Params("id")
+
+	imageID64, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "invalid image id",
+		})
+	}
+
+	imageID := uint(imageID64)
+
+	err = h.productSvc.DeleteProductImage(c.Context(), imageID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Image deleted successfully",
+	})
+}

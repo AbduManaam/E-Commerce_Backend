@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -39,3 +40,5 @@ type Payment struct {
     CreatedAt     time.Time
     UpdatedAt     time.Time
 }
+
+var ErrRecordNotFound = errors.New("record not found")

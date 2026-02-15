@@ -40,7 +40,6 @@ if !ok || !isAdmin {
     })
 }
 
-// call service safely, now isAdmin is guaranteed true
 if err := h.userSvc.BlockUser(isAdmin, uint(userID)); err != nil {
     logging.LogWarn("block user failed: service error", c, err, "userID", userID)
     return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -103,7 +102,6 @@ func (h *AdminUserHandler ) ListUsers(c *fiber.Ctx) error {
 	})
 }
 
-// GET /admin/users/:user_id/orders?page=1&limit=20
 func (h *AdminUserHandler ) GetUserOrders(c *fiber.Ctx) error {
 	userID, err := c.ParamsInt("user_id")
 	if err != nil || userID <= 0 {
@@ -134,7 +132,6 @@ func (h *AdminUserHandler ) GetUserOrders(c *fiber.Ctx) error {
 	})
 }
 
-// GET /admin/orders/:order_id
 func (h *AdminUserHandler ) GetOrderDetails(c *fiber.Ctx) error {
 	orderID, err := c.ParamsInt("order_id")
 	if err != nil || orderID <= 0 {

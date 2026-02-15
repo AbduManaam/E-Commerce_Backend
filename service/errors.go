@@ -35,6 +35,16 @@ var (
     ErrCartEmpty          = &ServiceError{Code: "CART_EMPTY", Msg:"Cart is Empty" }
 	ErrProductUnavailable  = &ServiceError{Code: "PRODUCT_UNAVAILABLE", Msg:"This Product is currently unavailable" }
 	ErrInsufficientStock   = &ServiceError{Code: "INSUFFICIENT_STOCK", Msg:"This product is out of stock " }
+    
+	ErrOrderAlreadyProcessed = &ServiceError{
+		Code: "ORDER_ALREADY_PROCESSED",
+		Msg:  "This order has already been processed and cannot be modified.",
+	}
+
+	ErrItemNotCancellable = &ServiceError{
+		Code: "ITEM_NOT_CANCELLABLE",
+		Msg:  "This order item cannot be cancelled in its current state.",
+	}
 
 	ErrOrderNotCancelable = &ServiceError{
 		Code: "ORDER_NOT_CANCELABLE",

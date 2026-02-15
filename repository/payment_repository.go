@@ -14,6 +14,10 @@ func NewPaymentRepository(db *gorm.DB) PaymentRepository {
 	return &paymentRepository{db: db}
 }
 
+func (r *paymentRepository) GetDB() *gorm.DB {
+	return r.db
+}
+
 func (r *paymentRepository) Create(payment *domain.Payment) error {
 	return r.db.Create(payment).Error
 }
@@ -44,4 +48,11 @@ func (r *paymentRepository) GetByGatewayID(gatewayID string) (*domain.Payment, e
         return nil, err
     }
     return &payment, nil
+}
+
+func (r *paymentRepository) UpdateTx(tx *gorm.DB, payment *domain.Payment) error {
+	return tx.Save(payment).Error
+}
+func (r *paymentRepository) CreateTx(tx *gorm.DB, payment *domain.Payment) error {
+	return tx.Create(payment).Error
 }

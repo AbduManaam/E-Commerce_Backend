@@ -51,14 +51,14 @@ func (s *OrderService) CreateOrder(
 		}
 	}()
 
-	// ✅ Step 1: Fetch user address
+	// Fetch user address
 	address, err := s.addressRepo.GetByID(userID, addressID)
 	if err != nil {
 		tx.Rollback()
 		return nil, err
 	}
 
-	// ✅ Step 2: Convert Address → OrderAddress (SNAPSHOT)
+	// Convert Address → OrderAddress (SNAPSHOT)
 	orderAddress := &domain.OrderAddress{
 		FullName: address.FullName,
 		Phone:    address.Phone,
@@ -107,8 +107,12 @@ func (s *OrderService) CreateOrder(
 			return nil, ErrProductUnavailable
 		}
 
-		unitPrice := product.Price
-		finalPrice := product.CalculatePrice(now)
+		unitPrice, err := product.GetPriceByType("H")
+	    if err != nil {
+		return nil, err
+		}
+	
+		finalPrice := product.CalculatePrice("H",now)
 		discount := unitPrice - finalPrice
 		subtotal := finalPrice * float64(ci.Quantity)
 
@@ -287,106 +291,141 @@ func (s *OrderService) UpdateOrderStatus(orderID uint, status domain.OrderStatus
 
 
 
-func (s *OrderService) CancelOrderItem(userID, orderID, itemID uint, reason string) error {
-    tx := s.orderRepo.Begin() // start transaction
-    defer func() {
-        if r := recover(); r != nil {
-            tx.Rollback()
-        }
-    }()
+//------------------------------------------------------------------
 
-    // 1️⃣ Get order with items (lock for update)
-    order, err := s.orderRepo.GetByID(orderID)
-    if err != nil {
-        tx.Rollback()
-        return ErrNotFound
-    }
 
-    // 2️⃣ Verify ownership
-    if order.UserID != userID {
-        tx.Rollback()
-        return ErrForbidden
-    }
+func (s *OrderService) CancelOrderItem(
+	userID, orderID, itemID uint,
+	reason string,
+) error {
 
-    // 3️⃣ Prevent cancelling if shipped/delivered
-    if order.Status == domain.OrderStatusShipped || order.Status == domain.OrderStatusDelivered {
-        tx.Rollback()
-        return &ServiceError{
-            Code: "ORDER_ALREADY_PROCESSED",
-            Msg:  "Cannot cancel items for shipped/delivered orders",
-        }
-    }
+	// Start transaction
+	tx := s.orderRepo.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			panic(r)
+		}
+	}()
 
-    // 4️⃣ Find item
-    var itemToCancel *domain.OrderItem
-    for i := range order.Items {
-        if order.Items[i].ID == itemID {
-            itemToCancel = &order.Items[i]
-            break
-        }
-    }
-    if itemToCancel == nil {
-        tx.Rollback()
-        return ErrNotFound
-    }
+	// Fetch order with lock
+	order, err := s.orderRepo.GetByIDForUpdate(tx, orderID)
+	if err != nil {
+		tx.Rollback()
+		return ErrNotFound
+	}
 
-    // 5️⃣ Check if item can be cancelled
-    if !itemToCancel.CanBeCancelled() {
-        tx.Rollback()
-        return &ServiceError{
-            Code: "ITEM_NOT_CANCELLABLE",
-            Msg:  "This item cannot be cancelled",
-        }
-    }
+	// Log for debugging
+	s.logger.Println("Order User:", order.UserID, "Request User:", userID)
 
-    // 6️⃣ Update item
-    now := time.Now().UTC()
-    itemToCancel.Status = domain.OrderItemStatusCancelled
-    itemToCancel.CancellationReason = &reason
-    itemToCancel.CancelledAt = &now
+	// Ownership check
+	if order.UserID != userID {
+		tx.Rollback()
+		return ErrForbidden
+	}
 
-    if err := s.orderRepo.UpdateOrderItemTx(tx, itemToCancel); err != nil {
-        tx.Rollback()
-        return err
-    }
+	// Check if order already processed
+	if order.Status == domain.OrderStatusShipped ||
+		order.Status == domain.OrderStatusDelivered {
+		tx.Rollback()
+		return ErrOrderAlreadyProcessed
+	}
 
-    // 7️⃣ Restore stock
-    product, err := s.productRead.GetByIDForUpdate(tx, itemToCancel.ProductID)
-    if err == nil && product != nil {
-        product.Stock += int(itemToCancel.Quantity)
-        if err := s.productWrite.UpdateTx(tx, product); err != nil {
-            tx.Rollback()
-            return err
-        }
-    }
+	// Fetch the order item with lock
+	item, err := s.orderRepo.GetOrderItemForUpdate(tx, orderID, itemID)
+	if err != nil {
+		tx.Rollback()
+		return ErrNotFound
+	}
 
-    // 8️⃣ Recalculate order totals & update status
-    allCancelled := true
-    newTotal := 0.0
-    for _, item := range order.Items {
-        if item.Status != domain.OrderItemStatusCancelled {
-            allCancelled = false
-            newTotal += item.FinalPrice * float64(item.Quantity)
-        }
-    }
-    order.FinalTotal = newTotal
-    if allCancelled {
-        order.Status = domain.OrderStatusCancelled
-    }
+	s.logger.Println("Item Status:", item.Status)
 
-    // 9️⃣ Save order
-    if err := s.orderRepo.UpdateTx(tx, order); err != nil {
-        tx.Rollback()
-        return err
-    }
+	// Check if item can be cancelled
+	if !item.CanBeCancelled() {
+		tx.Rollback()
+		return ErrItemNotCancellable
+	}
 
-    // 10️⃣ Commit transaction
-    if err := tx.Commit().Error; err != nil {
-        return err
-    }
+	// Mark item as cancelled
+	now := time.Now().UTC()
+	item.Status = domain.OrderItemStatusCancelled
+	item.CancellationReason = &reason
+	item.CancelledAt = &now
 
-    return nil
+	if err := s.orderRepo.UpdateOrderItemTx(tx, item); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Restore stock
+	product, err := s.productRead.GetByIDForUpdate(tx, item.ProductID)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	product.Stock += int(item.Quantity)
+
+	if err := s.productWrite.UpdateTx(tx, product); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Recalculate order totals
+	items, err := s.orderRepo.GetOrderItemsTx(tx, orderID)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	allCancelled := true
+	newTotal := 0.0
+
+	for _, it := range items {
+		if it.Status != domain.OrderItemStatusCancelled {
+			allCancelled = false
+			newTotal += it.Subtotal
+		}
+	}
+
+	order.FinalTotal = newTotal
+
+	if allCancelled {
+		order.Status = domain.OrderStatusCancelled
+	}
+
+	if err := s.orderRepo.UpdateTx(tx, order); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Commit transaction
+	return tx.Commit().Error
 }
+
+
+
+
+func (s *OrderService) ListOrderItems(
+	orderID uint,
+	userID uint,
+) ([]domain.OrderItem, error) {
+
+	order, err := s.orderRepo.GetOrderByID(orderID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ownership validation
+	if order.UserID != userID {
+		return nil, ErrForbidden
+	}
+
+	return s.orderRepo.GetOrderItems(orderID)
+}
+
+
+
 
 func (s *OrderService) GetUserOrdersPaginated(
 	userID uint,
@@ -489,8 +528,13 @@ func (s *OrderService) CreateDirectOrder(
 			return nil, ErrProductNotFound
 		}
 
-		unitPrice := product.Price
-		finalPrice := product.CalculatePrice(now)
+		unitPrice, err := product.GetPriceByType("H")
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+
+		finalPrice := product.CalculatePrice("H",now)
 		discount := unitPrice - finalPrice
 		subtotal := finalPrice * float64(req.Quantity)
 

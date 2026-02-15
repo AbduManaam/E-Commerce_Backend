@@ -8,6 +8,7 @@ import (
 	"backend/utils/databases"
 	"backend/utils/email"
 	"backend/utils/logging"
+	cloudinaryutil "backend/utils/utils/cloudinary"
 	"log"
 	"os"
 )
@@ -18,6 +19,7 @@ type Container struct {
 
 	// Handlers
 	AuthHandler     *handler.AuthHandler
+	HomeHandler     *handler.HomeHandler
 	UserHandler     *handler.UserHandler
 	AdminHandler    *handler.AdminUserHandler
 	ProductHandler  *handler.ProductHandler
@@ -25,22 +27,19 @@ type Container struct {
 	CartHandler     *handler.CartHandler
 	WishlistHandler *handler.WishlistHandler
 	CategoryHandler *handler.CategoryHandler
-	AddressHandler  *handler.AddressHandler 
+	AddressHandler  *handler.AddressHandler
 	PaymentHandler  *handler.PaymentHandler
 
 	DBCleanup func() error
 }
 
 func BuildContainer(cfg *config.AppConfig) (*Container, error) {
-	// ------------------------------------------------
-	// Logger
-	// ------------------------------------------------
+
+	// ---------------- LOGGER ----------------
 	logging.Init(cfg.Environment)
 	logger := logging.Logger
 
-	// ------------------------------------------------
-	// Database
-	// ------------------------------------------------
+	// ---------------- DATABASE ----------------
 	db := databases.NewPostgresDB(
 		cfg.Database.Host,
 		cfg.Database.User,
@@ -59,9 +58,7 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 
 	repoLogger := log.New(os.Stdout, "[SERVICE] ", log.LstdFlags|log.Lshortfile)
 
-	// ------------------------------------------------
-	// Repositories
-	// ------------------------------------------------
+	// ---------------- REPOSITORIES ----------------
 	authRepo := repository.NewAuthRepository(db)
 	userRepo := repository.NewUserRepository(db, logger)
 	productRepo := repository.NewProductRepository(db, logger)
@@ -71,21 +68,38 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	addressRepo := repository.NewAddressRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
 
+	heroRepo := repository.NewHeroRepo()
+	featureRepo := repository.NewFeatureRepo()
+	reviewRepo := repository.NewReviewRepo()
+
 	var cartRepo repository.CartRepositoryInterface =
 		repository.NewCartRepository(db, logger)
 
 	var productReader repository.ProductReader = productRepo
 	var productWriter repository.ProductWriter = productRepo
 
-	// ------------------------------------------------
-	// Email
-	// ------------------------------------------------
+	// ---------------- EMAIL ----------------
 	email.Init(cfg.SMTP)
 	emailSvc := email.NewSMTPService()
 
-	// ------------------------------------------------
-	// Services
-	// ------------------------------------------------
+	// ---------------- CLOUDINARY ----------------
+	cloudinaryClient, err := cloudinaryutil.New(
+		cfg.Cloudinary.CloudName,
+		cfg.Cloudinary.APIKey,
+		cfg.Cloudinary.APISecret,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// ---------------- SERVICES ----------------
+	homeSvc := service.NewHomeService(
+		heroRepo,
+		productRepo,
+		featureRepo,
+		reviewRepo,
+	)
+
 	authSvc := service.NewAuthService(
 		userRepo,
 		authRepo,
@@ -93,8 +107,18 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 		emailSvc,
 	)
 
-	userSvc := service.NewUserService(userRepo, logger)
-	productSvc := service.NewProductService(productRepo, logger)
+	userSvc := service.NewUserService(
+		userRepo,
+		authRepo,
+		logger,
+	)
+
+	productSvc := service.NewProductService(
+		db,
+		productRepo,
+		cloudinaryClient,
+		logger,
+	)
 
 	orderSvc := service.NewOrderService(
 		orderRepo,
@@ -119,7 +143,6 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	)
 
 	categorySvc := service.NewCategoryService(categoryRepo)
-
 	addressSvc := service.NewAddressService(addressRepo)
 
 	paymentSvc := service.NewPaymentService(
@@ -128,9 +151,7 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 		repoLogger,
 	)
 
-	// ------------------------------------------------
-	// Handlers
-	// ------------------------------------------------
+	// ---------------- HANDLERS ----------------
 	authHandler := handler.NewAuthHandler(authSvc)
 	userHandler := handler.NewUserHandler(userSvc)
 	adminHandler := handler.NewAdminUserHandler(userSvc, orderSvc)
@@ -139,12 +160,11 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	cartHandler := handler.NewCartHandler(cartSvc)
 	wishlistHandler := handler.NewWishlistHandler(wishlistSvc)
 	categoryHandler := handler.NewCategoryHandler(categorySvc)
-	addressHandler := handler.NewAddressHandler(addressSvc) // ✅ ADDED
+	addressHandler := handler.NewAddressHandler(addressSvc)
 	paymentHandler := handler.NewPaymentHandler(paymentSvc)
+	homeHandler := handler.NewHomeHandler(homeSvc)
 
-	// ------------------------------------------------
-	// Container
-	// ------------------------------------------------
+	// ---------------- CONTAINER ----------------
 	return &Container{
 		UserRepo: userRepo,
 
@@ -156,8 +176,9 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 		CartHandler:     cartHandler,
 		WishlistHandler: wishlistHandler,
 		CategoryHandler: categoryHandler,
-		AddressHandler:  addressHandler, // ✅ ADDED
+		AddressHandler:  addressHandler,
 		PaymentHandler:  paymentHandler,
+		HomeHandler:     homeHandler,
 
 		DBCleanup: sqlDB.Close,
 	}, nil

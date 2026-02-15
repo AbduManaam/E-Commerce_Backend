@@ -153,7 +153,7 @@ func (s *CartService) GetCart(userID uint) (*domain.Cart, error) {
 	now := time.Now()
 	for i := range cart.Items {
 		if cart.Items[i].Product.ID != 0 {
-			cart.Items[i].Product.FinalPrice = cart.Items[i].Product.CalculatePrice(now)
+			cart.Items[i].Product.FinalPrice = cart.Items[i].Product.CalculatePrice("H",now)
 		}
 	}
 	return cart, nil

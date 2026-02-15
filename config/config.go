@@ -44,7 +44,17 @@ type AppConfig struct {
 	Database DatabaseConfig `yaml:"database"`
 	JWT      JWTConfig      `yaml:"jwt"`
 	SMTP     SMTPConfig     `yaml:"smtp"`
+	Cloudinary CloudinaryConfig `yaml:"cloudinary"`
+
 }
+
+type CloudinaryConfig struct {
+    CloudName string `yaml:"cloud_name"`
+    APIKey    string `yaml:"api_key"`
+    APISecret string `yaml:"api_secret"`
+}
+
+
 
 func LoadConfig(path string) (*AppConfig, error) {
 	cfg := &AppConfig{}
@@ -103,6 +113,3 @@ and allows the same codebase to run in different environments by changing only t
 
 “Instead of hardcoding them” means not writing fixed values directly inside your source code.
 */
-
-
-

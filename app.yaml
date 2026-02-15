@@ -26,3 +26,9 @@ smtp:
   username : abdumanaam01@gmail.com
   password: jldwjdvvglvutufy
   from: "YUMZY <abdumanaam01@gmail.com>"
+
+cloudinary:
+  cloud_name: "ddovgqbsc"
+  api_key: "112882585682358"
+  api_secret: "8do0A3Wgcj-IpswLwmVDuLevFUc"
+  

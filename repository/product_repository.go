@@ -53,6 +53,8 @@ func (r *productRepository) GetByID(id uint) (*domain.Product, error) {
 
 	err := r.db.
 	Preload("Category").
+	Preload("Prices").
+	Preload("Images").
 	First(&product, id).Error
 	if err != nil {
 		r.logger.Error(
@@ -88,7 +90,8 @@ func (r *productRepository) List() ([]*domain.Product, error) {
 }
 
 func (r *productRepository) Update(p *domain.Product) error {
-	err := r.db.Save(p).Error
+	err := r.db.Session(&gorm.Session{FullSaveAssociations: true}).
+	Save(p).Error
 	if err != nil {
 		r.logger.Error(
 			"product update failed",
@@ -236,4 +239,67 @@ func (r *productRepository) UpdateTx(
 	}
 
 	return nil
+}
+
+func (r *productRepository) GetNewArrivals(limit int) ([]*dto.Product, error) {
+	data := []*dto.Product{
+		{ID: "p1", Name: "Rice & Curry", Price: 4.99, InStock: true, Sizes: []string{"default"}, ImageURL: "/images/product1.png", Category: "food"},
+		{ID: "p2", Name: "Burger Meal", Price: 6.99, InStock: true, Sizes: []string{"small", "medium"}, ImageURL: "/images/product2.png", Category: "food"},
+		{ID: "p3", Name: "Pizza", Price: 8.99, InStock: true, Sizes: []string{"small","medium","large"}, ImageURL: "/images/product3.png", Category: "food"},
+	}
+	if limit > len(data) { limit = len(data) }
+	return data[:limit], nil
+}
+
+
+// Get products filtered by optional min/max price
+func (r *productRepository) GetProductsByPrice(minPrice, maxPrice *float64) ([]domain.Product, error) {
+    query := r.db.Model(&domain.Product{}).
+        Joins("JOIN product_prices pp ON pp.product_id = products.id")
+
+    if minPrice != nil {
+        query = query.Where("pp.price >= ?", *minPrice)
+    }
+    if maxPrice != nil {
+        query = query.Where("pp.price <= ?", *maxPrice)
+    }
+
+    var products []domain.Product
+    if err := query.Distinct("products.id").Find(&products).Error; err != nil {
+        return nil, err
+    }
+
+    return products, nil
+}
+
+// Cloudinary
+
+func (r *productRepository) AddImage(
+	productID uint,
+	url string,
+	publicID string,
+	isPrimary bool,
+) error {
+
+	query := `
+	INSERT INTO product_images (product_id, image_url, public_id, is_primary)
+	VALUES ($1,$2,$3,$4)
+	`
+
+	return  r.db.Exec(query, productID, url, publicID, isPrimary).Error
+	
+}
+
+
+func (r *productRepository) GetImageByID(id uint) (*domain.ProductImage, error) {
+	var image domain.ProductImage
+	err := r.db.First(&image, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &image, nil
+}
+
+func (r *productRepository) DeleteImage(id uint) error {
+	return r.db.Delete(&domain.ProductImage{}, id).Error
 }
