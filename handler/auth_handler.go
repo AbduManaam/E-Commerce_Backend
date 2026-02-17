@@ -84,9 +84,10 @@ fmt.Println("Parsed Email:", req.Email)
 		Value:    refreshToken,
 		HTTPOnly: true,
 		Secure:   false,              
-		SameSite: fiber.CookieSameSiteStrictMode,
+		SameSite: fiber.CookieSameSiteLaxMode,
 		Expires:  time.Now().Add(time.Duration(h.authSvc.RefreshExpiry()) * time.Second),
 		Path:     "/",
+		Domain:    "",
 	})
 
 	logging.LogInfo("login successful", c, "userID", user.ID)
@@ -124,10 +125,10 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 		Name:     "refresh_token",
 		Value:    newRefreshToken,
 		HTTPOnly: true,
-		Secure:   true,
-		SameSite: fiber.CookieSameSiteStrictMode,
+		Secure:   false,
+		SameSite: fiber.CookieSameSiteLaxMode,
 		Expires:  time.Now().Add(time.Duration(h.authSvc.RefreshExpiry()) * time.Second),
-		Path:     "/auth/refresh",
+		Path:     "/",
 	})
 
 	return c.JSON(fiber.Map{

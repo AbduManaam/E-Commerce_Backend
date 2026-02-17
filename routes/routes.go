@@ -80,7 +80,7 @@ func SetUpRoutes(app *fiber.App, deps *Dependencies) {
 	// Addresses
 	addresses := api.Group("/addresses")
 	addresses.Post("", deps.AddressHandler.Create)
-	addresses.Get("/", deps.AddressHandler.List)
+	addresses.Get("", deps.AddressHandler.List)
 	addresses.Get("/:id", deps.AddressHandler.GetByID)
 	addresses.Put("/:id", deps.AddressHandler.Update)
 	addresses.Delete("/:id", deps.AddressHandler.Delete)
@@ -88,21 +88,21 @@ func SetUpRoutes(app *fiber.App, deps *Dependencies) {
 
 	// Cart
 	cart := api.Group("/cart")
-	cart.Post("/", deps.CartHandler.Add)
-	cart.Get("/", deps.CartHandler.Get)
+	cart.Post("", deps.CartHandler.Add)
+	cart.Get("", deps.CartHandler.Get)
 	cart.Put("/item/:itemId", deps.CartHandler.Update)
 	cart.Delete("/item/:itemId", deps.CartHandler.Delete)
 
 	// Wishlist
 	wishlist := api.Group("/wishlist")
-	wishlist.Post("/", deps.WishlistHandler.Add)
-	wishlist.Get("/", deps.WishlistHandler.Get)
+	wishlist.Post("", deps.WishlistHandler.Add)
+	wishlist.Get("", deps.WishlistHandler.Get)
 	wishlist.Delete("/:product_id", deps.WishlistHandler.Delete)
 
 	// Orders
 	orders := api.Group("/orders")
-	orders.Post("/", deps.OrderHandler.CreateOrder)
-	orders.Get("/", deps.OrderHandler.GetUserOrders)
+	orders.Post("", deps.OrderHandler.CreateOrder)
+	orders.Get("", deps.OrderHandler.GetUserOrders)
 	orders.Get("/:id", deps.OrderHandler.GetOrder)
 	orders.Put("/:id/cancel", deps.OrderHandler.CancelOrder)
 

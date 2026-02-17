@@ -211,16 +211,6 @@ func (s *ProductService) CreateProduct(req dto.CreateProductRequest) (*domain.Pr
 }
 
 
-// func (s *ProductService) ListProducts() ([]*domain.Product, error) {
-// 	products, err := s.productRepo.List()
-// 	if err != nil {
-// 		s.logger.Error("ListProducts failed", "err", err)
-// 		return nil, err
-// 	}
-// 	return products, nil
-// }
-
-
 func (s *ProductService) ListProducts() ([]dto.ProductResponse, error) {
 	products, err := s.productRepo.List()
 	if err != nil {
@@ -239,28 +229,6 @@ func (s *ProductService) ListProducts() ([]dto.ProductResponse, error) {
 	return responses, nil
 }
 
-
-
-// func (s *ProductService) GetProduct(id uint) (*domain.Product, error) {
-// 	if id == 0 {
-// 		s.logger.Warn("GetProduct failed: invalid productID", "product_id", id)
-// 		return nil, ErrInvalidInput
-// 	}
-
-// 	product, err := s.productRepo.GetByID(id)
-// 	if err != nil || product == nil {
-// 		s.logger.Warn(
-// 			"GetProduct failed: product not found",
-// 			"product_id", id,
-// 			"err", err,
-// 		)
-// 		return nil, ErrNotFound
-// 	}
-//     	now := time.Now()
-// 	product.FinalPrice = product.CalculatePrice("H",now)
-
-// 	return product, nil
-// }
 
 func (s *ProductService) GetProduct(id uint) (*dto.ProductResponse, error) {
 	if id == 0 {
@@ -405,7 +373,8 @@ func (s *ProductService) DeleteProduct(productID uint) error {
 	return nil
 }
 
-func(s *ProductService)ListActive(r dto.ProductListQuery)([]domain.Product,error){
+// ✅ UPDATED: Now returns (products, total, error)
+func(s *ProductService)ListActive(r dto.ProductListQuery)([]domain.Product, int64, error){
 	allowedSort:= map[string]bool{
 		"price": true,
 		"name": true,
@@ -415,8 +384,8 @@ func(s *ProductService)ListActive(r dto.ProductListQuery)([]domain.Product,error
 		r.Sort="created_at"
 	}
 	if r.Page <= 0 {
-	r.Page = 1
-    }
+		r.Page = 1
+	}
 
 	if r.Limit<=0{
 		r.Limit=10
@@ -427,15 +396,16 @@ func(s *ProductService)ListActive(r dto.ProductListQuery)([]domain.Product,error
 	if r.Order!="asc" && r.Order!="desc"{
 		r.Order="desc"
 	}
-    if !r.ShowInactive {
+	if !r.ShowInactive {
 		isActive := true
 		r.IsActive = &isActive
 	}
-    
-   products, err := s.productRepo.ListFiltered(r)
+	
+	// ✅ CHANGED: Get both products and total count from repository
+	products, total, err := s.productRepo.ListFiltered(r)
 	if err != nil {
 		s.logger.Error("ListFiltered failed", "err", err)
-		return nil, err
+		return nil, 0, err
 	}
 	
 	// Calculate dynamic prices for each product
@@ -444,7 +414,7 @@ func(s *ProductService)ListActive(r dto.ProductListQuery)([]domain.Product,error
 		products[i].FinalPrice = products[i].CalculatePrice("H",now)
 	}
 	
-    return products, nil
+	return products, total, nil
 }
 
 //----------------------------------------------
@@ -467,6 +437,8 @@ func(c *CategoryService)List()([]domain.Category,error){
 }
 
 
+// In product_service.go, update UploadProductImage method:
+
 func (s *ProductService) UploadProductImage(
 	ctx context.Context,
 	productID uint,
@@ -481,9 +453,14 @@ func (s *ProductService) UploadProductImage(
 	}
 	defer file.Close()
 
-	folder := "products/" + strconv.Itoa(int(productID))
+	// ✅ FIXED: Just use the productID as filename
+	filename := strconv.Itoa(int(productID))
 
-	imageURL, publicID, err := s.cloudinary.UploadImage(ctx, file, folder, productID)
+	// ✅ REMOVED: Don't create folder here, cloudinary.UploadImage handles it
+	// folder := "products/" + strconv.Itoa(int(productID))  ← DELETE THIS LINE
+
+	imageURL, publicID, err := s.cloudinary.UploadImage(ctx, file, filename, productID)
+	//                                                          ^^^^^^^^ just the filename now
 	if err != nil {
 		s.logger.Error("UploadProductImage: cloudinary upload failed", "err", err)
 		return nil, err
@@ -514,7 +491,6 @@ func (s *ProductService) UploadProductImage(
 	s.logger.Info("UploadProductImage: success", "productID", productID, "url", imageURL, "publicID", publicID)
 	return productImage, nil
 }
-
 
 func (s *ProductService) DeleteProductImage(
 	ctx context.Context,

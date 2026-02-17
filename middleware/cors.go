@@ -11,13 +11,13 @@ import (
 func CORSMiddleware() fiber.Handler {
 	return cors.New(cors.Config{
 		// Allow specific origins
-		AllowOrigins: "http://localhost:5173,http://localhost:5175,http://localhost:3000",
+		AllowOrigins: "http://localhost:5173,http://localhost:5175,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:5175",
 		
 		// Allow methods
 		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 		
 		// Allow headers
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Requested-With",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Requested-With,X-Request-ID",
 		
 		// Expose headers
 		ExposeHeaders: "Authorization",

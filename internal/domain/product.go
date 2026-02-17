@@ -42,7 +42,7 @@ type ProductPrice struct {
 type ProductImage struct {
 	ID        uint      `gorm:"primaryKey"`
 	ProductID uint      `gorm:"not null;index"`
-	URL       string    `gorm:"not null"`
+	URL       string    `gorm:"column:image_url;not null" json:"url"`
 	IsPrimary bool      `gorm:"default:false"`
 	PublicID  string    `gorm:"not null"`
 	CreatedAt time.Time

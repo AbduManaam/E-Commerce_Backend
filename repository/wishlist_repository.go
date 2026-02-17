@@ -68,7 +68,10 @@ func (r *WishlistRepository) GetByUserID(userID uint) ([]domain.WishlistItem, er
 
 	if err := r.db.
 		Where("user_id = ?", userID).
-		Preload("Product.Category").
+		Preload("Product.Images").           // ✅ Load product images
+        Preload("Product.Prices").           // ✅ Load product prices
+        Preload("Product.Category").         // ✅ Load category
+        Preload("Product.Variants"). 
 		Find(&items).Error; err != nil {
 
 		r.logger.Error(

@@ -3,12 +3,14 @@ package repository
 import (
 	"backend/handler/dto"
 	"backend/internal/domain"
+	"fmt"
 	"log/slog"
 	"time"
 
+	// "time"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-
 )
 
 type productRepository struct {
@@ -72,22 +74,19 @@ func (r *productRepository) List() ([]*domain.Product, error) {
 	var products []*domain.Product
 
 	err := r.db.
-	Preload("Category").
-	Find(&products).Error
+		Preload("Category").
+		Preload("Prices").
+		Preload("Images").
+		Find(&products).Error
 	if err != nil {
-		r.logger.Error(
-			"product list failed",
-			"err", err,
-		)
+		r.logger.Error("product list failed", "err", err)
 		return nil, err
 	}
 
-	r.logger.Info(
-		"product list fetched",
-		"count", len(products),
-	)
+	r.logger.Info("product list fetched", "count", len(products))
 	return products, nil
 }
+
 
 func (r *productRepository) Update(p *domain.Product) error {
 	err := r.db.Session(&gorm.Session{FullSaveAssociations: true}).
@@ -126,58 +125,173 @@ func (r *productRepository) Delete(id uint) error {
 	return nil
 }
 
-func (r *productRepository) ListFiltered(q dto.ProductListQuery) ([]domain.Product, error) {
-	var products []domain.Product
+// func (r *productRepository) ListFiltered(q dto.ProductListQuery) ([]domain.Product, error) {
+// 	var products []domain.Product
 
-	db := r.db.Model(&domain.Product{}).
-		Preload("Category").
-		Where("is_active = ?", true)
+// 	db := r.db.Model(&domain.Product{}).
+// 		Preload("Category").
+// 		Where("products.is_active = ?", true)
 
-	// Filter by category
-	if q.CategoryID != nil {
-		db = db.Where("category_id = ?", *q.CategoryID)
-	}
+// 	// Join price table ONLY if needed
+// 	if q.Sort == "price" || q.MinPrice != nil || q.MaxPrice != nil {
+// 		db = db.Joins(
+// 			"LEFT JOIN product_prices ON product_prices.product_id = products.id AND product_prices.type = ?",
+// 			"H", // change if needed
+// 		)
+// 	}
 
-	// Filter by price range
-	if q.MinPrice != nil && *q.MinPrice > 0 {
-		db = db.Where("price >= ?", *q.MinPrice)
-	}
-	if q.MaxPrice != nil && *q.MaxPrice > 0 {
-		db = db.Where("price <= ?", *q.MaxPrice)
-	}
+// 	// Filter by category
+// 	if q.CategoryID != nil {
+// 		db = db.Where("products.category_id = ?", *q.CategoryID)
+// 	}
 
-	// Filter by search term
-	if q.Search != "" {
-		like := "%" + q.Search + "%"
-		db = db.Where(
-			"products.name ILIKE ? OR products.description ILIKE ?",
-			like, like,
-		)
-	}
+// 	// Filter by price range
+// 	if q.MinPrice != nil && *q.MinPrice > 0 {
+// 		db = db.Where("product_prices.price >= ?", *q.MinPrice)
+// 	}
+// 	if q.MaxPrice != nil && *q.MaxPrice > 0 {
+// 		db = db.Where("product_prices.price <= ?", *q.MaxPrice)
+// 	}
 
-	// Filter by active offers
-	if q.OnlyActiveOffers {
-		now := time.Now()
-		db = db.Where(
-			"(discount_percent IS NOT NULL OR discount_amount IS NOT NULL) AND " +
-				"(offer_start IS NULL OR offer_start <= ?) AND " +
-				"(offer_end IS NULL OR offer_end >= ?)",
-			now, now,
-		)
-	}
+// 	// Filter by search term
+// 	if q.Search != "" {
+// 		like := "%" + q.Search + "%"
+// 		db = db.Where(
+// 			"products.name ILIKE ? OR products.description ILIKE ?",
+// 			like, like,
+// 		)
+// 	}
 
-	// Pagination
-	offset := (q.Page - 1) * q.Limit
+// 	// Filter by active offers
+// 	if q.OnlyActiveOffers {
+// 		now := time.Now()
+// 		db = db.Where(
+// 			"(discount_percent IS NOT NULL OR discount_amount IS NOT NULL) AND " +
+// 				"(offer_start IS NULL OR offer_start <= ?) AND " +
+// 				"(offer_end IS NULL OR offer_end >= ?)",
+// 			now, now,
+// 		)
+// 	}
 
-	err := db.
-		Order(q.Sort + " " + q.Order).
-		Limit(q.Limit).
-		Offset(offset).
-		Find(&products).
-		Error
+// 	// ✅ SAFE SORTING
+// 	allowedSorts := map[string]string{
+// 		"price":      "product_prices.price",
+// 		"name":       "products.name",
+// 		"created_at": "products.created_at",
+// 	}
 
-	return products, err
+// 	sortColumn, ok := allowedSorts[q.Sort]
+// 	if !ok {
+// 		sortColumn = "products.created_at"
+// 	}
+
+// 	// Pagination
+// 	offset := (q.Page - 1) * q.Limit
+
+// 	err := db.
+// 		Order(sortColumn + " " + q.Order).
+// 		Limit(q.Limit).
+// 		Offset(offset).
+// 		Find(&products).
+// 		Error
+
+// 	return products, err
+// }
+
+
+func (r *productRepository) ListFiltered(query dto.ProductListQuery) ([]domain.Product, int64, error) {
+    var products []domain.Product
+    var total int64
+    
+    // Start building the query
+    db := r.db.Model(&domain.Product{})
+    
+    // ==========================================
+    // APPLY FILTERS
+    // ==========================================
+    
+    // Category filter
+    if query.CategoryID != nil {
+        db = db.Where("category_id = ?", *query.CategoryID)
+    }
+    
+    // Search filter
+    if query.Search != "" {
+        searchPattern := "%" + query.Search + "%"
+        db = db.Where("name LIKE ? OR description LIKE ?", searchPattern, searchPattern)
+    }
+    
+    // Active/Inactive filter
+    if query.IsActive != nil {
+        db = db.Where("is_active = ?", *query.IsActive)
+    }
+    
+    // Price range filters
+    if query.MinPrice != nil {
+        // You'll need to join with product_prices table
+        db = db.Joins("LEFT JOIN product_prices ON products.id = product_prices.product_id")
+        db = db.Where("product_prices.price >= ?", *query.MinPrice)
+    }
+    
+    if query.MaxPrice != nil {
+        if query.MinPrice == nil {
+            db = db.Joins("LEFT JOIN product_prices ON products.id = product_prices.product_id")
+        }
+        db = db.Where("product_prices.price <= ?", *query.MaxPrice)
+    }
+    
+    // Offer filters
+    if query.OnlyActiveOffers {
+        now := time.Now()
+        db = db.Where("discount_percent > 0")
+        db = db.Where("(offer_start IS NULL OR offer_start <= ?)", now)
+        db = db.Where("(offer_end IS NULL OR offer_end >= ?)", now)
+    }
+    
+    // ==========================================
+    // ✅ COUNT TOTAL BEFORE PAGINATION
+    // ==========================================
+    countDB := db.Session(&gorm.Session{})
+    if err := countDB.Count(&total).Error; err != nil {
+        return nil, 0, err
+    }
+    
+    // ==========================================
+    // APPLY PAGINATION
+    // ==========================================
+    offset := (query.Page - 1) * query.Limit
+    db = db.Offset(offset).Limit(query.Limit)
+    
+    // ==========================================
+    // APPLY SORTING
+    // ==========================================
+    sortColumn := query.Sort
+    sortOrder := query.Order
+    
+    // Handle special case for price sorting
+    if sortColumn == "price" {
+        // Sort by the H type price
+        db = db.Joins("LEFT JOIN product_prices AS pp ON products.id = pp.product_id AND pp.type = 'H'")
+        db = db.Order("pp.price " + sortOrder)
+    } else {
+        db = db.Order(sortColumn + " " + sortOrder)
+    }
+    
+    // ==========================================
+    // PRELOAD RELATIONSHIPS
+    // ==========================================
+    db = db.Preload("Images").Preload("Prices").Preload("Category").Preload("Variants")
+    
+    // ==========================================
+    // EXECUTE QUERY
+    // ==========================================
+    if err := db.Find(&products).Error; err != nil {
+        return nil, 0, err
+    }
+    
+    return products, total, nil
 }
+
 
 //------------------------------------------------
 
@@ -241,15 +355,68 @@ func (r *productRepository) UpdateTx(
 	return nil
 }
 
+
+
+
+
 func (r *productRepository) GetNewArrivals(limit int) ([]*dto.Product, error) {
-	data := []*dto.Product{
-		{ID: "p1", Name: "Rice & Curry", Price: 4.99, InStock: true, Sizes: []string{"default"}, ImageURL: "/images/product1.png", Category: "food"},
-		{ID: "p2", Name: "Burger Meal", Price: 6.99, InStock: true, Sizes: []string{"small", "medium"}, ImageURL: "/images/product2.png", Category: "food"},
-		{ID: "p3", Name: "Pizza", Price: 8.99, InStock: true, Sizes: []string{"small","medium","large"}, ImageURL: "/images/product3.png", Category: "food"},
+	var products []domain.Product
+	
+	// ✅ Fetch real products from database
+	err := r.db.
+		Preload("Images").           // Load product images
+		Preload("Prices").           // Load product prices
+		Preload("Category").         // Load category
+		Where("is_active = ?", true). // Only active products
+		Order("created_at DESC").     // Newest first
+		Limit(limit).
+		Find(&products).Error
+	
+	if err != nil {
+		r.logger.Error("GetNewArrivals failed", "err", err)
+		return nil, err
 	}
-	if limit > len(data) { limit = len(data) }
-	return data[:limit], nil
+	
+	// Convert domain.Product to dto.Product
+	var dtoProducts []*dto.Product
+	
+	for _, p := range products {
+		// Calculate final price
+		p.FinalPrice = p.CalculatePrice("H", time.Now())
+		
+		// Build DTO
+		dtoProduct := &dto.Product{
+			ID:           fmt.Sprintf("%d", p.ID), // Convert uint to string
+			Name:         p.Name,
+			Price:        p.FinalPrice,
+			InStock:      p.Stock > 0,
+			Category:     p.Category.Name,
+		}
+		
+		// Add images
+		if len(p.Images) > 0 {
+			dtoProduct.ImageURL = p.Images[0].URL // First image as main
+			// If your dto.Product has an Images array field, populate it too
+		}
+		
+		// Add sizes (if you have variants)
+		if len(p.Variants) > 0 {
+			sizes := make([]string, len(p.Variants))
+			for i, v := range p.Variants {
+				sizes[i] = v.Size
+			}
+			dtoProduct.Sizes = sizes
+		} else {
+			dtoProduct.Sizes = []string{"default"}
+		}
+		
+		dtoProducts = append(dtoProducts, dtoProduct)
+	}
+	
+	r.logger.Info("GetNewArrivals success", "count", len(dtoProducts))
+	return dtoProducts, nil
 }
+
 
 
 // Get products filtered by optional min/max price

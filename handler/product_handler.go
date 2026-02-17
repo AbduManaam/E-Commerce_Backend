@@ -165,17 +165,20 @@ func (h *ProductHandler) ListFiltered(c *fiber.Ctx) error {
 		ShowInactive:    showInactive,
 	}
 
-	products, err := h.productSvc.ListActive(req)
+	// ✅ CHANGED: Now returns both products and total count
+	products, total, err := h.productSvc.ListActive(req)
 	if err != nil {
 		return HandleError(c, err)
 	}
 
-return c.JSON(fiber.Map{
+	return c.JSON(fiber.Map{
 		"products": products,
 		"page":     req.Page,
 		"limit":    req.Limit,
+		"total":    total,  // ✅ ADDED: Total count for pagination
 		"has_more": len(products) == req.Limit,
-	})}
+	})
+}
 
 //-----------------------------------------
 

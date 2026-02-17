@@ -22,7 +22,8 @@ type ProductRepository interface {
 	Create(product *domain.Product) error
 	GetByID(productID uint) (*domain.Product, error)
     List() ([]*domain.Product, error)               
-    ListFiltered(q dto.ProductListQuery) ([]domain.Product, error) 
+    // ListFiltered(q dto.ProductListQuery) ([]domain.Product, error) 
+	ListFiltered(query dto.ProductListQuery) ([]domain.Product, int64, error)
 	Update(product *domain.Product) error
 	Delete(id uint) error
 
