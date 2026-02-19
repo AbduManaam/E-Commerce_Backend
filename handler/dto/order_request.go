@@ -24,4 +24,3 @@ type OrderItemRequest struct {
 type CancelOrderItemRequest struct {
 	Reason string `json:"reason"`
 }
-

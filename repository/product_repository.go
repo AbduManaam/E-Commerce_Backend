@@ -5,6 +5,7 @@ import (
 	"backend/internal/domain"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	// "time"
@@ -125,79 +126,6 @@ func (r *productRepository) Delete(id uint) error {
 	return nil
 }
 
-// func (r *productRepository) ListFiltered(q dto.ProductListQuery) ([]domain.Product, error) {
-// 	var products []domain.Product
-
-// 	db := r.db.Model(&domain.Product{}).
-// 		Preload("Category").
-// 		Where("products.is_active = ?", true)
-
-// 	// Join price table ONLY if needed
-// 	if q.Sort == "price" || q.MinPrice != nil || q.MaxPrice != nil {
-// 		db = db.Joins(
-// 			"LEFT JOIN product_prices ON product_prices.product_id = products.id AND product_prices.type = ?",
-// 			"H", // change if needed
-// 		)
-// 	}
-
-// 	// Filter by category
-// 	if q.CategoryID != nil {
-// 		db = db.Where("products.category_id = ?", *q.CategoryID)
-// 	}
-
-// 	// Filter by price range
-// 	if q.MinPrice != nil && *q.MinPrice > 0 {
-// 		db = db.Where("product_prices.price >= ?", *q.MinPrice)
-// 	}
-// 	if q.MaxPrice != nil && *q.MaxPrice > 0 {
-// 		db = db.Where("product_prices.price <= ?", *q.MaxPrice)
-// 	}
-
-// 	// Filter by search term
-// 	if q.Search != "" {
-// 		like := "%" + q.Search + "%"
-// 		db = db.Where(
-// 			"products.name ILIKE ? OR products.description ILIKE ?",
-// 			like, like,
-// 		)
-// 	}
-
-// 	// Filter by active offers
-// 	if q.OnlyActiveOffers {
-// 		now := time.Now()
-// 		db = db.Where(
-// 			"(discount_percent IS NOT NULL OR discount_amount IS NOT NULL) AND " +
-// 				"(offer_start IS NULL OR offer_start <= ?) AND " +
-// 				"(offer_end IS NULL OR offer_end >= ?)",
-// 			now, now,
-// 		)
-// 	}
-
-// 	// ✅ SAFE SORTING
-// 	allowedSorts := map[string]string{
-// 		"price":      "product_prices.price",
-// 		"name":       "products.name",
-// 		"created_at": "products.created_at",
-// 	}
-
-// 	sortColumn, ok := allowedSorts[q.Sort]
-// 	if !ok {
-// 		sortColumn = "products.created_at"
-// 	}
-
-// 	// Pagination
-// 	offset := (q.Page - 1) * q.Limit
-
-// 	err := db.
-// 		Order(sortColumn + " " + q.Order).
-// 		Limit(q.Limit).
-// 		Offset(offset).
-// 		Find(&products).
-// 		Error
-
-// 	return products, err
-// }
-
 
 func (r *productRepository) ListFiltered(query dto.ProductListQuery) ([]domain.Product, int64, error) {
     var products []domain.Product
@@ -217,9 +145,11 @@ func (r *productRepository) ListFiltered(query dto.ProductListQuery) ([]domain.P
     
     // Search filter
     if query.Search != "" {
-        searchPattern := "%" + query.Search + "%"
-        db = db.Where("name LIKE ? OR description LIKE ?", searchPattern, searchPattern)
-    }
+    searchPattern := "%" + strings.ToLower(query.Search) + "%"
+    db = db.Joins("LEFT JOIN categories ON categories.id = products.category_id").
+        Where("LOWER(products.name) LIKE ? OR LOWER(categories.name) LIKE ?",
+            searchPattern, searchPattern)
+}
     
     // Active/Inactive filter
     if query.IsActive != nil {
@@ -322,6 +252,9 @@ func (r *productRepository) GetByIDForUpdate(
 
 	err := tx.
 		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Preload("Prices").        // ✅ ADD THIS - load prices
+		Preload("Images").        // ✅ ADD THIS - load images
+		Preload("Category").      
 		First(&product, id).
 		Error
 

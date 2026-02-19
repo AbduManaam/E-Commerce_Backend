@@ -67,12 +67,16 @@ type OrderRepository interface {
 	GetOrderItemForUpdate(tx *gorm.DB, orderID, itemID uint) (*domain.OrderItem, error)
 	GetOrderItemsTx(tx *gorm.DB, orderID uint) ([]domain.OrderItem, error)
 
+	GetByIDWithItems(orderID uint) (*domain.Order, error)
+	SaveOrderWithItems(order *domain.Order) error
+
 }
 
 type WishlistRepositoryInterface interface {
 	Add(item *domain.WishlistItem) error
 	Remove(userID, productID uint) error
 	GetByUserID(userID uint) ([]domain.WishlistItem, error)
+    Exists(userID, productID uint) (bool, error)
 }
 
 type CartRepositoryInterface interface {

@@ -12,6 +12,7 @@ const (
 	OrderStatusDelivered          OrderStatus = "delivered"
 	OrderStatusCancelled          OrderStatus = "cancelled"
 	OrderStatusPartiallyCancelled OrderStatus = "partially_cancelled"
+	// OrderItemStatusCancelled      OrderItemStatus = "cancelled"
 )
 
 type Order struct {

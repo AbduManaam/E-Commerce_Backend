@@ -15,8 +15,8 @@ type OrderService struct {
 	productWrite repository.ProductWriter
 	cartRepo     repository.CartRepositoryInterface
 	addressRepo  repository.AddressRepository 
+	paymentSvc   *PaymentService 
 	logger       *log.Logger
-	
 }
 
 func NewOrderService(
@@ -36,7 +36,6 @@ func NewOrderService(
 		logger:       logger,
 	}
 }
-
 
 func (s *OrderService) CreateOrder(
 	userID uint,
@@ -75,7 +74,7 @@ func (s *OrderService) CreateOrder(
 		return nil, err
 	}
 
-	// 3️⃣ Get cart (locked)
+	// Get cart (locked)
 	cart, err := s.cartRepo.GetForUpdate(tx, userID)
 	if err != nil {
 		tx.Rollback()
@@ -94,7 +93,7 @@ func (s *OrderService) CreateOrder(
 		now           = time.Now()
 	)
 
-	// 4️⃣ Process cart items
+	// Process cart items
 	for _, ci := range cart.Items {
 		product, err := s.productRead.GetByIDForUpdate(tx, ci.ProductID)
 		if err != nil {
@@ -107,23 +106,47 @@ func (s *OrderService) CreateOrder(
 			return nil, ErrProductUnavailable
 		}
 
-		unitPrice, err := product.GetPriceByType("H")
-	    if err != nil {
-		return nil, err
+		// ✅ FIXED: Get price from product_prices table
+		var unitPrice float64
+		var finalPrice float64
+
+		if len(product.Prices) > 0 {
+			// Try to get "H" (Half) price first
+			price, err := product.GetPriceByType("H")
+			if err != nil {
+				// If "H" not found, use first available price
+				if len(product.Prices) > 0 {
+					unitPrice = product.Prices[0].Price
+				} else {
+					tx.Rollback()
+					return nil, ErrPriceNotFound
+				}
+			} else {
+				unitPrice = price
+			}
+			
+			// Calculate final price with any active discounts
+			finalPrice = product.CalculatePrice("H", now)
+			if finalPrice == 0 {
+				finalPrice = unitPrice
+			}
+		} else {
+			// No prices found for this product
+			tx.Rollback()
+			return nil, ErrPriceNotFound
 		}
-	
-		finalPrice := product.CalculatePrice("H",now)
+
 		discount := unitPrice - finalPrice
 		subtotal := finalPrice * float64(ci.Quantity)
 
 		orderItems = append(orderItems, domain.OrderItem{
-			ProductID:       product.ID,
-			Quantity:        ci.Quantity,
-			Price:           unitPrice,
-			DiscountAmount:  discount,
-			FinalPrice:      finalPrice,
-			Subtotal:        subtotal,
-			Status:          domain.OrderItemStatusPending,
+			ProductID:      product.ID,
+			Quantity:       ci.Quantity,
+			Price:          unitPrice,
+			DiscountAmount: discount,
+			FinalPrice:     finalPrice,
+			Subtotal:       subtotal,
+			Status:         domain.OrderItemStatusPending,
 		})
 
 		total += unitPrice * float64(ci.Quantity)
@@ -136,7 +159,7 @@ func (s *OrderService) CreateOrder(
 		}
 	}
 
-	// 5️⃣ Create order (VALID FK)
+	// Create order
 	order := &domain.Order{
 		UserID:            userID,
 		Items:             orderItems,
@@ -154,7 +177,7 @@ func (s *OrderService) CreateOrder(
 		return nil, err
 	}
 
-	// 6️⃣ Clear cart
+	// Clear cart
 	if err := s.cartRepo.ClearTx(tx, userID); err != nil {
 		tx.Rollback()
 		return nil, err
@@ -163,19 +186,16 @@ func (s *OrderService) CreateOrder(
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
-	// After tx.Commit().Error
-fullOrder, err := s.orderRepo.GetByIDWithAssociations(order.ID)
-if err != nil {
-    return nil, err
+
+	// Reload with associations
+	fullOrder, err := s.orderRepo.GetByIDWithAssociations(order.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return fullOrder, nil
 }
-
-return fullOrder, nil
-
-
-}
-
-
-func (s *OrderService) GetUserOrders(userID uint) ([]domain.Order, error) {
+func (s *OrderService) GetUserOrders(userID uint) ([]dto.OrderResponse, error) {
 	if userID == 0 {
 		s.logger.Printf("GetUserOrders failed: invalid userID=0")
 		return nil, errors.New("invalid user id")
@@ -183,18 +203,73 @@ func (s *OrderService) GetUserOrders(userID uint) ([]domain.Order, error) {
 
 	orders, err := s.orderRepo.GetOrdersByUserID(userID)
 	if err != nil {
-		s.logger.Printf(
-			"GetUserOrders failed: repo error userID=%d err=%v",
-			userID, err,
-		)
+		s.logger.Printf("GetUserOrders failed: repo error userID=%d err=%v", userID, err)
 		return nil, err
 	}
 
 	if len(orders) == 0 {
-		return []domain.Order{}, nil
+		return []dto.OrderResponse{}, nil
 	}
 
-	return orders, nil
+	var response []dto.OrderResponse
+
+	for _, order := range orders {
+
+		var items []dto.OrderItemResponse
+
+		for _, item := range order.Items {
+			var images []dto.ProductImageDTO
+			for _, img := range item.Product.Images {
+				images = append(images, dto.ProductImageDTO{URL: img.URL})
+			}
+
+			items = append(items, dto.OrderItemResponse{
+				ID:             item.ID,
+				Quantity:       item.Quantity,
+				Price:          item.Price,
+				DiscountAmount: item.DiscountAmount,
+				FinalPrice:     item.FinalPrice,
+				Subtotal:       item.Subtotal,
+				Status:         string(item.Status),
+				Product: dto.ProductResponse{
+					ID:     item.Product.ID,
+					Name:   item.Product.Name,
+					Price:  item.Product.FinalPrice,
+					Images: images,
+				},
+			})
+		}
+
+		// Map shipping address
+		var shippingAddress *dto.OrderAddressDTO
+		if order.ShippingAddress != nil {
+			shippingAddress = &dto.OrderAddressDTO{
+				FullName: order.ShippingAddress.FullName,
+				Phone:    order.ShippingAddress.Phone,
+				Address:  order.ShippingAddress.Address,
+				City:     order.ShippingAddress.City,
+				State:    order.ShippingAddress.State,
+				Country:  order.ShippingAddress.Country,
+				ZipCode:  order.ShippingAddress.ZipCode,
+				Landmark: order.ShippingAddress.Landmark,
+			}
+		}
+
+		response = append(response, dto.OrderResponse{
+			ID:              order.ID,
+			Status:          string(order.Status),
+			Total:           order.Total,
+			Discount:        order.Discount,
+			FinalTotal:      order.FinalTotal,
+			PaymentMethod:   string(order.PaymentMethod),
+			PaymentStatus:   string(order.PaymentStatus),
+			CreatedAt:       order.CreatedAt,
+			ShippingAddress: shippingAddress,
+			Items:           items,
+		})
+	}
+
+	return response, nil
 }
 
 func (s *OrderService) GetOrder(userID uint, orderID uint) (*domain.Order, error) {
@@ -235,7 +310,8 @@ func (s *OrderService) CancelOrder(userID uint, orderID uint) error {
 		return ErrInvalidInput
 	}
 
-	order, err := s.orderRepo.GetByID(orderID)
+	// 👇 IMPORTANT: preload items
+	order, err := s.orderRepo.GetByIDWithItems(orderID)
 	if err != nil {
 		s.logger.Printf(
 			"CancelOrder failed: order not found orderID=%d err=%v",
@@ -260,8 +336,38 @@ func (s *OrderService) CancelOrder(userID uint, orderID uint) error {
 		return ErrOrderNotCancelable
 	}
 
-	return s.orderRepo.UpdateStatus(orderID, domain.OrderStatusCancelled)
+	// ✅ update order status
+	order.Status = domain.OrderStatusCancelled
+
+	// ✅ update ALL item statuses
+	for i := range order.Items {
+		order.Items[i].Status = domain.OrderItemStatusCancelled
+	}
+
+	// ✅ save everything
+	if err := s.orderRepo.SaveOrderWithItems(order); err != nil {
+		s.logger.Printf(
+			"CancelOrder failed: save error orderID=%d err=%v",
+			orderID, err,
+		)
+		return err
+	}
+
+	// ✅ trigger refund if already paid via online payment (not COD)
+	if order.PaymentStatus == domain.PaymentStatusPaid &&
+		order.PaymentMethod != domain.PaymentMethodCOD {
+		if err := s.paymentSvc.RefundPayment(orderID); err != nil {
+			// don't block cancellation if refund fails, just log it
+			s.logger.Printf(
+				"CancelOrder: refund failed orderID=%d err=%v",
+				orderID, err,
+			)
+		}
+	}
+
+	return nil
 }
+
 
 func (s *OrderService) ListAllOrders() ([]domain.Order, error) {
 	orders, err := s.orderRepo.ListAll()
@@ -289,17 +395,11 @@ func (s *OrderService) UpdateOrderStatus(orderID uint, status domain.OrderStatus
 	return s.orderRepo.UpdateStatus(orderID, status)
 }
 
-
-
-//------------------------------------------------------------------
-
-
 func (s *OrderService) CancelOrderItem(
 	userID, orderID, itemID uint,
 	reason string,
 ) error {
 
-	// Start transaction
 	tx := s.orderRepo.Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -308,30 +408,25 @@ func (s *OrderService) CancelOrderItem(
 		}
 	}()
 
-	// Fetch order with lock
 	order, err := s.orderRepo.GetByIDForUpdate(tx, orderID)
 	if err != nil {
 		tx.Rollback()
 		return ErrNotFound
 	}
 
-	// Log for debugging
 	s.logger.Println("Order User:", order.UserID, "Request User:", userID)
 
-	// Ownership check
 	if order.UserID != userID {
 		tx.Rollback()
 		return ErrForbidden
 	}
 
-	// Check if order already processed
 	if order.Status == domain.OrderStatusShipped ||
 		order.Status == domain.OrderStatusDelivered {
 		tx.Rollback()
 		return ErrOrderAlreadyProcessed
 	}
 
-	// Fetch the order item with lock
 	item, err := s.orderRepo.GetOrderItemForUpdate(tx, orderID, itemID)
 	if err != nil {
 		tx.Rollback()
@@ -340,13 +435,11 @@ func (s *OrderService) CancelOrderItem(
 
 	s.logger.Println("Item Status:", item.Status)
 
-	// Check if item can be cancelled
 	if !item.CanBeCancelled() {
 		tx.Rollback()
 		return ErrItemNotCancellable
 	}
 
-	// Mark item as cancelled
 	now := time.Now().UTC()
 	item.Status = domain.OrderItemStatusCancelled
 	item.CancellationReason = &reason
@@ -357,7 +450,6 @@ func (s *OrderService) CancelOrderItem(
 		return err
 	}
 
-	// Restore stock
 	product, err := s.productRead.GetByIDForUpdate(tx, item.ProductID)
 	if err != nil {
 		tx.Rollback()
@@ -371,7 +463,6 @@ func (s *OrderService) CancelOrderItem(
 		return err
 	}
 
-	// Recalculate order totals
 	items, err := s.orderRepo.GetOrderItemsTx(tx, orderID)
 	if err != nil {
 		tx.Rollback()
@@ -399,12 +490,8 @@ func (s *OrderService) CancelOrderItem(
 		return err
 	}
 
-	// Commit transaction
 	return tx.Commit().Error
 }
-
-
-
 
 func (s *OrderService) ListOrderItems(
 	orderID uint,
@@ -416,16 +503,12 @@ func (s *OrderService) ListOrderItems(
 		return nil, err
 	}
 
-	// Ownership validation
 	if order.UserID != userID {
 		return nil, ErrForbidden
 	}
 
 	return s.orderRepo.GetOrderItems(orderID)
 }
-
-
-
 
 func (s *OrderService) GetUserOrdersPaginated(
 	userID uint,
@@ -465,15 +548,11 @@ func (s *OrderService) GetOrderDetail(orderID uint) (*domain.Order, error) {
 	return order, nil
 }
 
-
-
-
 func (s *OrderService) CreateOrderFromCart(
 	userID uint,
 	addressID uint,
 	paymentMethod domain.PaymentMethod,
 ) (*domain.Order, error) {
-	// Use your CreateOrder service, which now reloads associations
 	return s.CreateOrder(userID, addressID, paymentMethod)
 }
 
@@ -491,7 +570,6 @@ func (s *OrderService) CreateDirectOrder(
 		}
 	}()
 
-	// Address → OrderAddress
 	address, err := s.addressRepo.GetByID(userID, addressID)
 	if err != nil {
 		tx.Rollback()
@@ -528,24 +606,43 @@ func (s *OrderService) CreateDirectOrder(
 			return nil, ErrProductNotFound
 		}
 
-		unitPrice, err := product.GetPriceByType("H")
-		if err != nil {
+		// ✅ FIXED: Get price from product_prices table
+		var unitPrice float64
+		var finalPrice float64
+
+		if len(product.Prices) > 0 {
+			price, err := product.GetPriceByType("H")
+			if err != nil {
+				if len(product.Prices) > 0 {
+					unitPrice = product.Prices[0].Price
+				} else {
+					tx.Rollback()
+					return nil, ErrPriceNotFound
+				}
+			} else {
+				unitPrice = price
+			}
+			
+			finalPrice = product.CalculatePrice("H", now)
+			if finalPrice == 0 {
+				finalPrice = unitPrice
+			}
+		} else {
 			tx.Rollback()
-			return nil, err
+			return nil, ErrPriceNotFound
 		}
 
-		finalPrice := product.CalculatePrice("H",now)
 		discount := unitPrice - finalPrice
 		subtotal := finalPrice * float64(req.Quantity)
 
 		orderItems = append(orderItems, domain.OrderItem{
-			ProductID:       product.ID,
-			Quantity:        req.Quantity,
-			Price:           unitPrice,
-			DiscountAmount:  discount,
-			FinalPrice:      finalPrice,
-			Subtotal:        subtotal,
-			Status:          domain.OrderItemStatusPending,
+			ProductID:      product.ID,
+			Quantity:       req.Quantity,
+			Price:          unitPrice,
+			DiscountAmount: discount,
+			FinalPrice:     finalPrice,
+			Subtotal:       subtotal,
+			Status:         domain.OrderItemStatusPending,
 		})
 
 		total += unitPrice * float64(req.Quantity)
@@ -579,9 +676,6 @@ func (s *OrderService) CreateDirectOrder(
 		return nil, err
 	}
 
-	// -------------------------
-	// Reload with associations
-	// -------------------------
 	fullOrder, err := s.orderRepo.GetByIDWithAssociations(order.ID)
 	if err != nil {
 		return nil, err

@@ -87,6 +87,11 @@ func (r *orderRepository) GetByUserID(userID uint) ([]*domain.Order, error) {
 
 	err := r.db.
 		Where("user_id = ?", userID).
+		Preload("Items").                    // ✅ Add this
+        Preload("Items.Product").            // ✅ Add this
+        Preload("Items.Product.Images").     // ✅ Add this
+        Preload("ShippingAddress").          // ✅ Add this
+        Order("created_at DESC").
 		Find(&orders).Error
 
 	if err != nil {
@@ -107,33 +112,29 @@ func (r *orderRepository) GetByUserID(userID uint) ([]*domain.Order, error) {
 }
 
 func (r *orderRepository) GetOrdersByUserID(userID uint) ([]domain.Order, error) {
-	if userID == 0 {
-		r.logger.Error("invalid user id in GetOrdersByUserID")
-		return nil, errors.New("invalid user id")
-	}
+    if userID == 0 {
+        r.logger.Error("invalid user id in GetOrdersByUserID")
+        return nil, errors.New("invalid user id")
+    }
 
-	var orders []domain.Order
+    var orders []domain.Order
 
-	err := r.db.
-		Where("user_id = ?", userID).
-		Order("created_at DESC").
-		Find(&orders).Error
+    err := r.db.
+        Where("user_id = ?", userID).
+        Preload("Items").
+        Preload("Items.Product").
+        Preload("Items.Product.Images").
+        Preload("ShippingAddress").
+        Order("created_at DESC").
+        Find(&orders).Error
 
-	if err != nil {
-		r.logger.Error(
-			"get orders by user id failed",
-			"user_id", userID,
-			"err", err,
-		)
-		return nil, err
-	}
+    if err != nil {
+        r.logger.Error("get orders by user id failed", "user_id", userID, "err", err)
+        return nil, err
+    }
 
-	r.logger.Info(
-		"orders fetched by user id",
-		"user_id", userID,
-		"count", len(orders),
-	)
-	return orders, nil
+    r.logger.Info("orders fetched by user id", "user_id", userID, "count", len(orders))
+    return orders, nil
 }
 
 func (r *orderRepository) ListAll() ([]domain.Order, error) {
@@ -318,7 +319,11 @@ func (r *orderRepository) GetOrderItems(orderID uint) ([]domain.OrderItem, error
 
 func (r *orderRepository) GetOrderByID(orderID uint) (*domain.Order, error) {
 	var order domain.Order
-	err := r.db.First(&order, orderID).Error
+	err := r.db.
+	Preload("Items").
+	Preload("Items.Product").
+	Preload("ShippingAddress").
+	First(&order, orderID).Error
 	return &order, err
 }
 
@@ -357,4 +362,14 @@ func (r *orderRepository) GetOrderItemsTx(tx *gorm.DB, orderID uint) ([]domain.O
 		Where("order_id = ?", orderID).
 		Find(&items).Error
 	return items, err
+}
+
+func (r *orderRepository) GetByIDWithItems(orderID uint) (*domain.Order, error) {
+	var order domain.Order
+	err := r.db.Preload("Items").First(&order, orderID).Error
+	return &order, err
+}
+
+func (r *orderRepository) SaveOrderWithItems(order *domain.Order) error {
+	return r.db.Session(&gorm.Session{FullSaveAssociations: true}).Save(order).Error
 }

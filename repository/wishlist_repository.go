@@ -90,3 +90,22 @@ func (r *WishlistRepository) GetByUserID(userID uint) ([]domain.WishlistItem, er
 
 	return items, nil
 }
+
+func (r *WishlistRepository) Exists(userID, productID uint) (bool, error) {
+	var count int64
+	err := r.db.Model(&domain.WishlistItem{}).
+		Where("user_id = ? AND product_id = ?", userID, productID).
+		Count(&count).Error
+	
+	if err != nil {
+		r.logger.Error(
+			"wishlist exists check failed",
+			"user_id", userID,
+			"product_id", productID,
+			"err", err,
+		)
+		return false, err
+	}
+	
+	return count > 0, nil
+}

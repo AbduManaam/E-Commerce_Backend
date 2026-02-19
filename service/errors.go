@@ -45,6 +45,14 @@ var (
 		Code: "ITEM_NOT_CANCELLABLE",
 		Msg:  "This order item cannot be cancelled in its current state.",
 	}
+	ErrConflict = &ServiceError{
+		Code:       "CONFLICT",
+		Msg:        "Resource already exists",
+	}
+    ErrPriceNotFound = &ServiceError{
+	Code:       "PRICE_NOT_FOUND",
+	Msg:        "Product price not found",
+}
 
 	ErrOrderNotCancelable = &ServiceError{
 		Code: "ORDER_NOT_CANCELABLE",

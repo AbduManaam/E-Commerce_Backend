@@ -192,3 +192,43 @@ func (s *PaymentService) ConfirmPayment(paymentID string, status string) (*domai
 	s.logger.Printf("ConfirmPayment: payment & order updated successfully, paymentID=%d, orderID=%d", payment.ID, order.ID)
 	return payment, nil
 }
+
+
+//RefundPayment 
+func (s *PaymentService) RefundPayment(orderID uint) error {
+    tx := s.paymentRepo.GetDB().Begin()
+
+    payment, err := s.paymentRepo.GetByOrderID(orderID)
+    if err != nil {
+        tx.Rollback()
+        return fmt.Errorf("payment not found for order %d", orderID)
+    }
+
+    if payment.Status != domain.PaymentStatusPaid {
+        tx.Rollback()
+        return errors.New("only paid payments can be refunded")
+    }
+
+    payment.Status = domain.PaymentStatusRefunded
+
+    if err := s.paymentRepo.UpdateTx(tx, payment); err != nil {
+        tx.Rollback()
+        return err
+    }
+
+    // Also update order payment status
+    order, err := s.orderRepo.GetByID(orderID)
+    if err != nil {
+        tx.Rollback()
+        return err
+    }
+
+    order.PaymentStatus = domain.PaymentStatusRefunded
+
+    if err := s.orderRepo.UpdateTx(tx, order); err != nil {
+        tx.Rollback()
+        return err
+    }
+
+    return tx.Commit().Error
+}

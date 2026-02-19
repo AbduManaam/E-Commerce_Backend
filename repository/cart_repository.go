@@ -31,6 +31,8 @@ func (r *cartRepository) GetorCreateCart(userID uint) (*domain.Cart, error) {
 	err := r.db.
 		Where("user_id = ?", userID).
 		Preload("Items.Product.Category").
+		Preload("Items.Product.Images").    
+		Preload("Items.Product.Prices"). 
 		First(&cart).Error
 
 	if err != nil {

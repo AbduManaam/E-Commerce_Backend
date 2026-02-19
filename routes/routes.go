@@ -142,6 +142,8 @@ func SetUpRoutes(app *fiber.App, deps *Dependencies) {
 	// Cloudinary
 	admin.Post("/products/:id/image", deps.ProductHandler.UploadImage)
 	admin.Delete("/products/images/:id", deps.ProductHandler.DeleteProductImage)
-
+    
+	//Refund
+	admin.Post("/payments/refund/:order_id", deps.PaymentHandler.RefundPayment)
 
 }

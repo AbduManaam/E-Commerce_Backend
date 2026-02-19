@@ -31,6 +31,17 @@ func (s *WishlistService) Add(userID, productID uint) error {
 		return ErrInvalidInput
 	}
 
+	// Check if already in wishlist
+	exists, err := s.repo.Exists(userID, productID)
+	if err != nil {
+		s.logger.Printf("Wishlist Add failed: exists check error userID=%d productID=%d err=%v", userID, productID, err)
+		return err
+	}
+	if exists {
+		s.logger.Printf("Wishlist Add skipped: already exists userID=%d productID=%d", userID, productID)
+		return ErrConflict.WithContext("Product already in wishlist")
+	}
+
 	// Check product exists
 	if _, err := s.productReader.GetByID(productID); err != nil {
 		s.logger.Printf("Wishlist Add failed: product not found productID=%d err=%v", productID, err)

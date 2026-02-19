@@ -5,6 +5,7 @@ import (
 	"backend/internal/domain"
 	"backend/service"
 	"backend/utils/logging"
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -73,4 +74,31 @@ func (h *PaymentHandler) ConfirmPayment(c *fiber.Ctx) error {
     }
 
     return c.JSON(res)
+}
+
+//RefundPayment
+
+func (h *PaymentHandler) RefundPayment(c *fiber.Ctx) error {
+    // Admin only — already protected by admin middleware in routes
+
+    orderIDParam := c.Params("order_id")
+    orderID, err := strconv.ParseUint(orderIDParam, 10, 64)
+    if err != nil {
+        logging.LogWarn("RefundPayment: invalid order_id", c, err)
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+            "error": "invalid order_id",
+        })
+    }
+
+    if err := h.paymentSvc.RefundPayment(uint(orderID)); err != nil {
+        logging.LogWarn("RefundPayment: failed", c, err, "orderID", orderID)
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+            "error": err.Error(),
+        })
+    }
+
+    logging.LogInfo("RefundPayment: success", c, "orderID", orderID)
+    return c.JSON(fiber.Map{
+        "message": "Refund processed successfully",
+    })
 }
