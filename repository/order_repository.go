@@ -4,6 +4,8 @@ import (
 	"backend/internal/domain"
 	"errors"
 	"log/slog"
+	"strings"
+	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -24,8 +26,6 @@ func NewOrderRepository(
 	}
 }
 
-// ------------------------------------------------------------
-
 func (r *orderRepository) Begin() *gorm.DB {
 	return r.db.Begin()
 }
@@ -34,161 +34,187 @@ func (r *orderRepository) CreateTx(tx *gorm.DB, order *domain.Order) error {
 	return tx.Create(order).Error
 }
 
-
-
 func (r *orderRepository) Create(order *domain.Order) error {
-	r.logger.Info(
-		"creating order",
-		"user_id", order.UserID,
-	)
+	r.logger.Info("creating order", "user_id", order.UserID)
 
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		return tx.Create(order).Error
 	})
 
 	if err != nil {
-		r.logger.Error(
-			"order create failed",
-			"user_id", order.UserID,
-			"err", err,
-		)
+		r.logger.Error("order create failed", "user_id", order.UserID, "err", err)
 		return err
 	}
 
-	r.logger.Info(
-		"order created",
-		"order_id", order.ID,
-		"user_id", order.UserID,
-	)
+	r.logger.Info("order created", "order_id", order.ID, "user_id", order.UserID)
 	return nil
 }
 
 func (r *orderRepository) GetByID(id uint) (*domain.Order, error) {
-    var order domain.Order
+	var order domain.Order
 
-    err := r.db.
-        Preload("Items.Product.Category").
-        Preload("ShippingAddress").
-        First(&order, id).Error
+	err := r.db.
+		Preload("Items.Product.Category").
+		 Preload("Items.Product.Images").
+		Preload("ShippingAddress").
+		First(&order, id).Error
 
-    if err != nil {
-        r.logger.Error("order get by id failed", "order_id", id, "err", err)
-        return nil, err
-    }
+	if err != nil {
+		r.logger.Error("order get by id failed", "order_id", id, "err", err)
+		return nil, err
+	}
 
-    return &order, nil
+	return &order, nil
 }
-
-
-// ------------------------------------------------------------
 
 func (r *orderRepository) GetByUserID(userID uint) ([]*domain.Order, error) {
 	var orders []*domain.Order
 
 	err := r.db.
 		Where("user_id = ?", userID).
-		Preload("Items").                    // ✅ Add this
-        Preload("Items.Product").            // ✅ Add this
-        Preload("Items.Product.Images").     // ✅ Add this
-        Preload("ShippingAddress").          // ✅ Add this
-        Order("created_at DESC").
+		Preload("Items").
+		Preload("Items.Product").
+		Preload("Items.Product.Images").
+		Preload("ShippingAddress").
+		Order("created_at DESC").
 		Find(&orders).Error
 
 	if err != nil {
-		r.logger.Error(
-			"get orders by user id failed",
-			"user_id", userID,
-			"err", err,
-		)
+		r.logger.Error("get orders by user id failed", "user_id", userID, "err", err)
 		return nil, err
 	}
 
-	r.logger.Info(
-		"orders fetched by user id",
-		"user_id", userID,
-		"count", len(orders),
-	)
+	r.logger.Info("orders fetched by user id", "user_id", userID, "count", len(orders))
 	return orders, nil
 }
 
 func (r *orderRepository) GetOrdersByUserID(userID uint) ([]domain.Order, error) {
-    if userID == 0 {
-        r.logger.Error("invalid user id in GetOrdersByUserID")
-        return nil, errors.New("invalid user id")
-    }
+	if userID == 0 {
+		r.logger.Error("invalid user id in GetOrdersByUserID")
+		return nil, errors.New("invalid user id")
+	}
 
-    var orders []domain.Order
+	var orders []domain.Order
 
-    err := r.db.
-        Where("user_id = ?", userID).
-        Preload("Items").
-        Preload("Items.Product").
-        Preload("Items.Product.Images").
-        Preload("ShippingAddress").
-        Order("created_at DESC").
-        Find(&orders).Error
+	err := r.db.
+		Where("user_id = ?", userID).
+		Preload("Items").
+		Preload("Items.Product").
+		Preload("Items.Product.Images").
+		Preload("ShippingAddress").
+		Order("created_at DESC").
+		Find(&orders).Error
 
-    if err != nil {
-        r.logger.Error("get orders by user id failed", "user_id", userID, "err", err)
-        return nil, err
-    }
+	if err != nil {
+		r.logger.Error("get orders by user id failed", "user_id", userID, "err", err)
+		return nil, err
+	}
 
-    r.logger.Info("orders fetched by user id", "user_id", userID, "count", len(orders))
-    return orders, nil
+	r.logger.Info("orders fetched by user id", "user_id", userID, "count", len(orders))
+	return orders, nil
 }
 
 func (r *orderRepository) ListAll() ([]domain.Order, error) {
 	var orders []domain.Order
 
 	err := r.db.
-		Preload("Items").
+		Preload("Items.Product.Images").
+		Preload("Items.Product.Category").
 		Order("created_at DESC").
 		Find(&orders).Error
 
 	if err != nil {
-		r.logger.Error(
-			"list all orders failed",
-			"err", err,
-		)
+		r.logger.Error("list all orders failed", "err", err)
 		return nil, err
 	}
 
-	r.logger.Info(
-		"all orders listed",
-		"count", len(orders),
-	)
+	r.logger.Info("all orders listed", "count", len(orders))
 	return orders, nil
 }
 
 func (r *orderRepository) UpdateStatus(orderID uint, status domain.OrderStatus) error {
-	if orderID == 0 {
-		r.logger.Error("invalid order id in UpdateStatus")
-		return errors.New("invalid order id")
-	}
+    if orderID == 0 {
+        r.logger.Error("invalid order id in UpdateStatus")
+        return errors.New("invalid order id")
+    }
 
-	err := r.db.
-		Model(&domain.Order{}).
-		Where("id = ?", orderID).
-		Update("status", status).
-		Error
+    // Fetch order first to check payment method
+    var order domain.Order
+    if err := r.db.First(&order, orderID).Error; err != nil {
+        r.logger.Error("UpdateStatus: order not found", "order_id", orderID, "err", err)
+        return err
+    }
 
-	if err != nil {
-		r.logger.Error(
-			"update order status failed",
-			"order_id", orderID,
-			"status", status,
-			"err", err,
-		)
-		return err
-	}
+    r.logger.Info("fetched order for status update",
+        "order_id", orderID,
+        "payment_method", order.PaymentMethod,
+        "current_payment_status", order.PaymentStatus,
+        "new_status", status,
+    )
 
-	r.logger.Info(
-		"order status updated",
-		"order_id", orderID,
-		"status", status,
-	)
-	return nil
+    updates := map[string]interface{}{
+        "status": status,
+    }
+
+    isCOD := strings.EqualFold(string(order.PaymentMethod), "cod")
+    isRazorpay := strings.EqualFold(string(order.PaymentMethod), "razorpay")
+
+    switch {
+    case status == domain.OrderStatusDelivered:
+        // Razorpay & COD: delivered → paid
+        now := time.Now()
+        updates["payment_status"] = "paid"
+        updates["paid_at"] = &now
+
+    case isRazorpay && status == domain.OrderStatusCancelled:
+        // Razorpay cancelled → refunded (actual refund handled by PaymentService)
+        updates["payment_status"] = "refunded"
+        updates["paid_at"] = nil
+
+    case isRazorpay && (status == domain.OrderStatusPending || status == domain.OrderStatusShipped || status == domain.OrderStatusConfirmed):
+        // Razorpay: Pending/Shipped/Confirmed → payment status stays pending
+        updates["payment_status"] = "pending"
+        updates["paid_at"] = nil
+
+    case isCOD && status == domain.OrderStatusCancelled:
+        // COD cancelled → pending (was never actually paid)
+        updates["payment_status"] = "pending"
+        updates["paid_at"] = nil
+
+    case isCOD && (status == domain.OrderStatusPending || status == domain.OrderStatusShipped || status == domain.OrderStatusConfirmed):
+        // COD: Pending/Shipped/Confirmed → pending
+        updates["payment_status"] = "pending"
+        updates["paid_at"] = nil
+    }
+
+    err := r.db.
+        Model(&domain.Order{}).
+        Where("id = ?", orderID).
+        Updates(updates).
+        Error
+
+    if err != nil {
+        r.logger.Error("update order status failed",
+            "order_id", orderID,
+            "status", status,
+            "err", err,
+        )
+        return err
+    }
+
+    r.logger.Info("order status updated successfully",
+        "order_id", orderID,
+        "status", status,
+        "payment_method", order.PaymentMethod,
+        "isCOD", isCOD,
+    )
+    return nil
 }
+
+
+
+
+
 
 func (r *orderRepository) Delete(id uint) error {
 	if id == 0 {
@@ -198,27 +224,15 @@ func (r *orderRepository) Delete(id uint) error {
 
 	err := r.db.Delete(&domain.Order{}, id).Error
 	if err != nil {
-		r.logger.Error(
-			"order delete failed",
-			"order_id", id,
-			"err", err,
-		)
+		r.logger.Error("order delete failed", "order_id", id, "err", err)
 		return err
 	}
 
-	r.logger.Info(
-		"order deleted",
-		"order_id", id,
-	)
+	r.logger.Info("order deleted", "order_id", id)
 	return nil
 }
 
-func (r *orderRepository) GetOrdersByUserIDPaginated(
-	userID uint,
-	offset int,
-	limit int,
-) ([]domain.Order, error) {
-
+func (r *orderRepository) GetOrdersByUserIDPaginated(userID uint, offset int, limit int) ([]domain.Order, error) {
 	if userID == 0 {
 		r.logger.Error("invalid user id in GetOrdersByUserIDPaginated")
 		return nil, errors.New("invalid user id")
@@ -235,18 +249,13 @@ func (r *orderRepository) GetOrdersByUserIDPaginated(
 		Find(&orders).Error
 
 	if err != nil {
-		r.logger.Error(
-			"paginated orders fetch failed",
-			"user_id", userID,
-			"offset", offset,
-			"limit", limit,
-			"err", err,
-		)
+		r.logger.Error("paginated orders fetch failed", "user_id", userID, "offset", offset, "limit", limit, "err", err)
 		return nil, err
 	}
 
 	return orders, nil
 }
+
 func (r *orderRepository) CountOrdersByUserID(userID uint) (int64, error) {
 	if userID == 0 {
 		r.logger.Error("invalid user id in CountOrdersByUserID")
@@ -261,50 +270,45 @@ func (r *orderRepository) CountOrdersByUserID(userID uint) (int64, error) {
 		Count(&count).Error
 
 	if err != nil {
-		r.logger.Error(
-			"count orders by user id failed",
-			"user_id", userID,
-			"err", err,
-		)
+		r.logger.Error("count orders by user id failed", "user_id", userID, "err", err)
 		return 0, err
 	}
 
 	return count, nil
 }
 
-
 func (r *orderRepository) GetOrderItem(orderID, itemID uint) (*domain.OrderItem, error) {
-    var item domain.OrderItem
-    err := r.db.Where("order_id = ? AND id = ?", orderID, itemID).First(&item).Error
-    return &item, err
+	var item domain.OrderItem
+	err := r.db.Where("order_id = ? AND id = ?", orderID, itemID).First(&item).Error
+	return &item, err
 }
 
 func (r *orderRepository) UpdateOrderItem(item *domain.OrderItem) error {
-    return r.db.Save(item).Error
+	return r.db.Save(item).Error
 }
 
 func (r *orderRepository) Update(order *domain.Order) error {
-    return r.db.Save(order).Error
+	return r.db.Save(order).Error
 }
 
 func (r *orderRepository) UpdateOrderItemTx(tx *gorm.DB, item *domain.OrderItem) error {
-    return tx.Save(item).Error
+	return tx.Save(item).Error
 }
 
 func (r *orderRepository) UpdateTx(tx *gorm.DB, order *domain.Order) error {
-    return tx.Save(order).Error
+	return tx.Save(order).Error
 }
 
 func (r *orderRepository) CreateOrder(order *domain.Order) error {
-    return r.db.Create(order).Error
+	return r.db.Create(order).Error
 }
 
 func (r *orderRepository) GetByIDWithAssociations(id uint) (*domain.Order, error) {
-    var order domain.Order
-    err := r.db.Preload("Items.Product").
-                 Preload("ShippingAddress").
-                 First(&order, id).Error
-    return &order, err
+	var order domain.Order
+	err := r.db.Preload("Items.Product").
+		Preload("ShippingAddress").
+		First(&order, id).Error
+	return &order, err
 }
 
 func (r *orderRepository) GetOrderItems(orderID uint) ([]domain.OrderItem, error) {
@@ -313,17 +317,16 @@ func (r *orderRepository) GetOrderItems(orderID uint) ([]domain.OrderItem, error
 		Where("order_id = ?", orderID).
 		Preload("Product").
 		Find(&items).Error
-
 	return items, err
 }
 
 func (r *orderRepository) GetOrderByID(orderID uint) (*domain.Order, error) {
 	var order domain.Order
 	err := r.db.
-	Preload("Items").
-	Preload("Items.Product").
-	Preload("ShippingAddress").
-	First(&order, orderID).Error
+		Preload("Items").
+		Preload("Items.Product").
+		Preload("ShippingAddress").
+		First(&order, orderID).Error
 	return &order, err
 }
 
@@ -331,13 +334,11 @@ func (r *orderRepository) UpdateOrder(order *domain.Order) error {
 	return r.db.Save(order).Error
 }
 
-func (r *orderRepository) WithTransaction(
-    fn func(repo OrderRepository) error,
-) error {
-    return r.db.Transaction(func(tx *gorm.DB) error {
-        txRepo := &orderRepository{db: tx}
-        return fn(txRepo)
-    })
+func (r *orderRepository) WithTransaction(fn func(repo OrderRepository) error) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		txRepo := &orderRepository{db: tx}
+		return fn(txRepo)
+	})
 }
 
 func (r *orderRepository) GetByIDForUpdate(tx *gorm.DB, id uint) (*domain.Order, error) {

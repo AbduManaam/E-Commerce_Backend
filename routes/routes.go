@@ -130,6 +130,7 @@ func SetUpRoutes(app *fiber.App, deps *Dependencies) {
 	admin.Get("/orders", deps.OrderHandler.ListAllOrders)
 	admin.Put("/orders/:id/status", deps.OrderHandler.UpdateOrderStatus)
 	admin.Put("/orders/:id", deps.OrderHandler.AdminUpdateOrder)
+	admin.Get("/orders/:id", deps.OrderHandler.AdminGetOrder)
 
 	// Products
 	admin.Post("/products", deps.ProductHandler.CreateProduct)

@@ -292,3 +292,21 @@ func (h *OrderHandler) ListOrderItems(c *fiber.Ctx) error {
 
 	return c.JSON(items)
 }
+
+
+// Add this new admin-specific handler
+func (h *OrderHandler) AdminGetOrder(c *fiber.Ctx) error {
+    idParam := c.Params("id")
+    orderID, err := strconv.ParseUint(idParam, 10, 64)
+    if err != nil {
+        return HandleError(c, service.ErrInvalidInput)
+    }
+
+    // ✅ No userID check — admin can view any order
+    order, err := h.orderSvc.GetOrderByID(uint(orderID))
+    if err != nil {
+        return HandleError(c, err)
+    }
+
+    return c.JSON(order)
+}

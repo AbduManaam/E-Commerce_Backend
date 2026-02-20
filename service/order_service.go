@@ -25,6 +25,7 @@ func NewOrderService(
 	productWrite repository.ProductWriter,
 	cartRepo repository.CartRepositoryInterface,
 	addressRepo repository.AddressRepository,
+	paymentSvc *PaymentService,
 	logger *log.Logger,
 ) *OrderService {
 	return &OrderService{
@@ -33,6 +34,7 @@ func NewOrderService(
 		productWrite: productWrite,
 		cartRepo:     cartRepo,
 		addressRepo:  addressRepo,
+		paymentSvc:   paymentSvc,
 		logger:       logger,
 	}
 }
@@ -353,11 +355,9 @@ func (s *OrderService) CancelOrder(userID uint, orderID uint) error {
 		return err
 	}
 
-	// ✅ trigger refund if already paid via online payment (not COD)
-	if order.PaymentStatus == domain.PaymentStatusPaid &&
-		order.PaymentMethod != domain.PaymentMethodCOD {
+	// ✅ trigger refund for online payments (Razorpay/Stripe) - RefundPayment checks Payment.Status internally
+	if order.PaymentMethod != domain.PaymentMethodCOD && s.paymentSvc != nil {
 		if err := s.paymentSvc.RefundPayment(orderID); err != nil {
-			// don't block cancellation if refund fails, just log it
 			s.logger.Printf(
 				"CancelOrder: refund failed orderID=%d err=%v",
 				orderID, err,
@@ -390,6 +390,17 @@ func (s *OrderService) UpdateOrderStatus(orderID uint, status domain.OrderStatus
 			orderID, status,
 		)
 		return ErrInvalidOrderStatus
+	}
+
+	// Razorpay cancelled: trigger refund before updating status
+	if status == domain.OrderStatusCancelled && s.paymentSvc != nil {
+		order, err := s.orderRepo.GetByID(orderID)
+		if err == nil && order.PaymentMethod == domain.PaymentMethodRazorpay {
+			if err := s.paymentSvc.RefundPayment(orderID); err != nil {
+				s.logger.Printf("UpdateOrderStatus: Razorpay refund failed orderID=%d err=%v", orderID, err)
+				// continue - repo will still set payment_status to refunded
+			}
+		}
 	}
 
 	return s.orderRepo.UpdateStatus(orderID, status)
@@ -682,4 +693,8 @@ func (s *OrderService) CreateDirectOrder(
 	}
 
 	return fullOrder, nil
+}
+
+func (s *OrderService) GetOrderByID(orderID uint) (*domain.Order, error) {
+    return s.orderRepo.GetByID(orderID) // already preloads ShippingAddress ✅
 }

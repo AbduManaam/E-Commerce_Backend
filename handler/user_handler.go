@@ -32,6 +32,7 @@ func (h *UserHandler) GetProfile(c *fiber.Ctx) error {
 		ID:    user.ID,
 		Name:  user.Name,
 		Email: user.Email,
+		Role:  user.Role,
 	}
 
 	return c.JSON(resp)
