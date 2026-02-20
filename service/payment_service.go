@@ -81,7 +81,6 @@ func (s *PaymentService) CreatePaymentIntent(
 	}
 
 	var clientSecret string
-	now := time.Now().UTC()
 
 	switch method {
 	case domain.PaymentMethodRazorpay:
@@ -93,12 +92,8 @@ func (s *PaymentService) CreatePaymentIntent(
 		clientSecret = payment.GatewayID
 
 	case domain.PaymentMethodCOD:
-		// COD: mark payment and order as paid immediately
-		payment.Status = domain.PaymentStatusPaid
-		payment.PaidAt = &now
-
-		order.PaymentStatus = domain.PaymentStatusPaid
-		order.PaidAt = &now
+		// COD: payment status stays pending until delivered
+		order.PaymentStatus = domain.PaymentStatusPending
 		order.PaymentMethod = method
 	}
 
@@ -172,7 +167,8 @@ func (s *PaymentService) ConfirmPayment(paymentID string, status string) (*domai
 	}
 
 	if payment.Status == domain.PaymentStatusPaid {
-		order.PaymentStatus = domain.PaymentStatusPaid
+		// Razorpay: order payment_status stays "pending" until delivered
+		order.PaymentStatus = domain.PaymentStatusPending
 		order.PaymentMethod = payment.PaymentMethod
 		order.PaidAt = payment.PaidAt
 	}

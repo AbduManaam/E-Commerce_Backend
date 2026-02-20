@@ -120,12 +120,19 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 		logger,
 	)
 
+	paymentSvc := service.NewPaymentService(
+		paymentRepo,
+		orderRepo,
+		repoLogger,
+	)
+
 	orderSvc := service.NewOrderService(
 		orderRepo,
 		productReader,
 		productWriter,
 		cartRepo,
 		addressRepo,
+		paymentSvc,
 		repoLogger,
 	)
 
@@ -144,12 +151,6 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 
 	categorySvc := service.NewCategoryService(categoryRepo)
 	addressSvc := service.NewAddressService(addressRepo)
-
-	paymentSvc := service.NewPaymentService(
-		paymentRepo,
-		orderRepo,
-		repoLogger,
-	)
 
 	// ---------------- HANDLERS ----------------
 	authHandler := handler.NewAuthHandler(authSvc)
