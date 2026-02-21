@@ -62,11 +62,11 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	authRepo := repository.NewAuthRepository(db)
 	userRepo := repository.NewUserRepository(db, logger)
 	productRepo := repository.NewProductRepository(db, logger)
-	orderRepo := repository.NewOrderRepository(db, logger)
+	paymentRepo := repository.NewPaymentRepository(db)
+	orderRepo := repository.NewOrderRepository(db, logger, paymentRepo)
 	wishlistRepo := repository.NewWishlistRepository(db, logger)
 	categoryRepo := repository.NewCategoryRepository(db)
 	addressRepo := repository.NewAddressRepository(db)
-	paymentRepo := repository.NewPaymentRepository(db)
 
 	heroRepo := repository.NewHeroRepo()
 	featureRepo := repository.NewFeatureRepo()

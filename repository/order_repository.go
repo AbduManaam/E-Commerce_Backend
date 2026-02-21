@@ -12,17 +12,20 @@ import (
 )
 
 type orderRepository struct {
-	db     *gorm.DB
-	logger *slog.Logger
+	db          *gorm.DB
+	logger      *slog.Logger
+	paymentRepo PaymentRepository
 }
 
 func NewOrderRepository(
 	db *gorm.DB,
 	logger *slog.Logger,
+	paymentRepo PaymentRepository,
 ) OrderRepository {
 	return &orderRepository{
-		db:     db,
-		logger: logger,
+		db:          db,
+		logger:      logger,
+		paymentRepo: paymentRepo,
 	}
 }
 
@@ -167,8 +170,12 @@ func (r *orderRepository) UpdateStatus(orderID uint, status domain.OrderStatus) 
         updates["paid_at"] = &now
 
     case isRazorpay && status == domain.OrderStatusCancelled:
-        // Razorpay cancelled → refunded (actual refund handled by PaymentService)
-        updates["payment_status"] = "refunded"
+        // Razorpay cancelled: if payment was completed → refunded; if still pending → cancelled
+        paymentStatus := string(domain.PaymentStatusCancelled)
+        if payment, err := r.paymentRepo.GetByOrderID(orderID); err == nil && payment.Status == domain.PaymentStatusPaid {
+            paymentStatus = string(domain.PaymentStatusRefunded)
+        }
+        updates["payment_status"] = paymentStatus
         updates["paid_at"] = nil
 
     case isRazorpay && (status == domain.OrderStatusPending || status == domain.OrderStatusShipped || status == domain.OrderStatusConfirmed):
@@ -177,8 +184,8 @@ func (r *orderRepository) UpdateStatus(orderID uint, status domain.OrderStatus) 
         updates["paid_at"] = nil
 
     case isCOD && status == domain.OrderStatusCancelled:
-        // COD cancelled → pending (was never actually paid)
-        updates["payment_status"] = "pending"
+        // COD cancelled → payment status = cancelled (per business rules)
+        updates["payment_status"] = string(domain.PaymentStatusCancelled)
         updates["paid_at"] = nil
 
     case isCOD && (status == domain.OrderStatusPending || status == domain.OrderStatusShipped || status == domain.OrderStatusConfirmed):

@@ -18,10 +18,11 @@ const (
 type PaymentStatus string
 
 const (
-    PaymentStatusPending PaymentStatus = "pending"
-    PaymentStatusPaid    PaymentStatus = "paid"
-    PaymentStatusFailed  PaymentStatus = "failed"
-    PaymentStatusRefunded PaymentStatus = "refunded"
+    PaymentStatusPending   PaymentStatus = "pending"
+    PaymentStatusPaid      PaymentStatus = "paid"
+    PaymentStatusFailed    PaymentStatus = "failed"
+    PaymentStatusRefunded  PaymentStatus = "refunded"
+    PaymentStatusCancelled PaymentStatus = "cancelled"
 )
 
 type Payment struct {
