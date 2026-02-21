@@ -12,7 +12,7 @@ const (
 	OrderStatusDelivered          OrderStatus = "delivered"
 	OrderStatusCancelled          OrderStatus = "cancelled"
 	OrderStatusPartiallyCancelled OrderStatus = "partially_cancelled"
-	// OrderItemStatusCancelled      OrderItemStatus = "cancelled"
+    OrderStatusRefunded           OrderStatus = "refunded"  
 )
 
 type Order struct {
@@ -87,7 +87,8 @@ func IsValidOrderStatus(status OrderStatus) bool {
 		OrderStatusShipped,
 		OrderStatusDelivered,
 		OrderStatusCancelled,
-		OrderStatusPartiallyCancelled:
+		OrderStatusPartiallyCancelled,
+		OrderStatusRefunded:
 		return true
 	default:
 		return false

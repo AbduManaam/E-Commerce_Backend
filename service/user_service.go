@@ -76,3 +76,36 @@ func (s *UserService) UpdateProfile(userID uint, newName string) error {
 
 	return nil
 }
+
+func (s *UserService) UnblockUser(isAdmin bool, targetUserID uint) error {
+    if !isAdmin {
+        s.logger.Warn("non-admin unblock attempt", "target_user_id", targetUserID)
+        return ErrForbidden
+    }
+
+    if targetUserID == 0 {
+        s.logger.Warn("invalid targetUserID", "target_user_id", targetUserID)
+        return ErrInvalidInput
+    }
+
+    user, err := s.userRepo.GetByID(targetUserID)
+    if err != nil || user == nil {
+        s.logger.Error("user not found", "target_user_id", targetUserID, "err", err)
+        return ErrUserNotFound
+    }
+
+    if !user.IsBlocked {
+        s.logger.Info("user already unblocked", "target_user_id", targetUserID)
+        return nil
+    }
+
+    user.IsBlocked = false
+
+    if err := s.userRepo.Update(user); err != nil {
+        s.logger.Error("db update failed", "target_user_id", targetUserID, "err", err)
+        return err
+    }
+
+    s.logger.Info("user unblocked successfully", "target_user_id", targetUserID)
+    return nil
+}

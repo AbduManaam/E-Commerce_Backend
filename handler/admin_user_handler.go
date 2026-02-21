@@ -145,3 +145,25 @@ func (h *AdminUserHandler ) GetOrderDetails(c *fiber.Ctx) error {
 
 	return c.JSON(order)
 }
+
+func (h *AdminUserHandler) UnblockUser(c *fiber.Ctx) error {
+    idParam := c.Params("id")
+    userID, err := strconv.ParseUint(idParam, 10, 64)
+    if err != nil {
+        logging.LogWarn("unblock user failed: invalid id", c, err)
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user id"})
+    }
+
+    isAdmin, ok := c.Locals("isAdmin").(bool)
+    if !ok || !isAdmin {
+        return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Only admins can unblock users"})
+    }
+
+    if err := h.userSvc.UnblockUser(isAdmin, uint(userID)); err != nil {
+        logging.LogWarn("unblock user failed: service error", c, err, "userID", userID)
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Unable to unblock user"})
+    }
+
+    logging.LogInfo("user unblocked successfully", c, "userID", userID)
+    return c.JSON(fiber.Map{"message": "user unblocked successfully"})
+}

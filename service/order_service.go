@@ -391,18 +391,6 @@ func (s *OrderService) UpdateOrderStatus(orderID uint, status domain.OrderStatus
 		)
 		return ErrInvalidOrderStatus
 	}
-
-	// Razorpay cancelled: trigger refund before updating status
-	if status == domain.OrderStatusCancelled && s.paymentSvc != nil {
-		order, err := s.orderRepo.GetByID(orderID)
-		if err == nil && order.PaymentMethod == domain.PaymentMethodRazorpay {
-			if err := s.paymentSvc.RefundPayment(orderID); err != nil {
-				s.logger.Printf("UpdateOrderStatus: Razorpay refund failed orderID=%d err=%v", orderID, err)
-				// continue - repo will still set payment_status to refunded
-			}
-		}
-	}
-
 	return s.orderRepo.UpdateStatus(orderID, status)
 }
 

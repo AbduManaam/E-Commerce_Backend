@@ -374,20 +374,30 @@ func (r *productRepository) GetProductsByPrice(minPrice, maxPrice *float64) ([]d
 
 // Cloudinary
 
-func (r *productRepository) AddImage(
-	productID uint,
-	url string,
-	publicID string,
-	isPrimary bool,
-) error {
+// func (r *productRepository) AddImage(
+// 	productID uint,
+// 	url string,
+// 	publicID string,
+// 	isPrimary bool,
+// ) error {
 
-	query := `
-	INSERT INTO product_images (product_id, image_url, public_id, is_primary)
-	VALUES ($1,$2,$3,$4)
-	`
+// 	query := `
+// 	INSERT INTO product_images (product_id, image_url, public_id, is_primary)
+// 	VALUES ($1,$2,$3,$4)
+// 	`
 
-	return  r.db.Exec(query, productID, url, publicID, isPrimary).Error
+// 	return  r.db.Exec(query, productID, url, publicID, isPrimary).Error
 	
+// }
+
+func (r *productRepository) AddImage(productID uint, url string, publicID string, isPrimary bool) error {
+    image := domain.ProductImage{
+        ProductID: productID,
+        URL:       url,      // GORM maps this to image_url column ✅
+        PublicID:  publicID,
+        IsPrimary: isPrimary,
+    }
+    return r.db.Create(&image).Error  // ← use GORM not raw SQL
 }
 
 

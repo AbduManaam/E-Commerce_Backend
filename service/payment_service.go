@@ -51,7 +51,7 @@ func (s *PaymentService) CreatePaymentIntent(
 	}
 
 	// Check if order is payable
-	if order.Status != domain.OrderStatusPending {
+	if order.Status != domain.OrderStatusPending  {
 		tx.Rollback()
 		return nil, "", errors.New("order is not payable")
 	}
@@ -168,7 +168,7 @@ func (s *PaymentService) ConfirmPayment(paymentID string, status string) (*domai
 
 	if payment.Status == domain.PaymentStatusPaid {
 		// Razorpay: order payment_status stays "pending" until delivered
-		order.PaymentStatus = domain.PaymentStatusPending
+		order.PaymentStatus = domain.PaymentStatusPaid
 		order.PaymentMethod = payment.PaymentMethod
 		order.PaidAt = payment.PaidAt
 	}
@@ -206,13 +206,11 @@ func (s *PaymentService) RefundPayment(orderID uint) error {
     }
 
     payment.Status = domain.PaymentStatusRefunded
-
     if err := s.paymentRepo.UpdateTx(tx, payment); err != nil {
         tx.Rollback()
         return err
     }
 
-    // Also update order payment status
     order, err := s.orderRepo.GetByID(orderID)
     if err != nil {
         tx.Rollback()
@@ -220,6 +218,7 @@ func (s *PaymentService) RefundPayment(orderID uint) error {
     }
 
     order.PaymentStatus = domain.PaymentStatusRefunded
+    order.Status = "refunded" // ← ADD THIS so analytics can track it
 
     if err := s.orderRepo.UpdateTx(tx, order); err != nil {
         tx.Rollback()

@@ -184,7 +184,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 	}
 
 	var req struct {
-		Status string `json:"status" validate:"required,oneof=pending confirmed shipped delivered cancelled"`
+		Status string `json:"status" validate:"required,oneof=pending confirmed shipped delivered cancelled refunded"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		logging.LogWarn("update order status failed: body parse", c, err, "orderID", orderID)

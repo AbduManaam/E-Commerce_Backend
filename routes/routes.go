@@ -125,6 +125,7 @@ func SetUpRoutes(app *fiber.App, deps *Dependencies) {
 	admin.Put("/users/:id", deps.AdminUserHandler.UpdateUser)
 	admin.Put("/users/:id/block", deps.AdminUserHandler.BlockUser)
 	admin.Get("/users/:user_id/orders", deps.AdminUserHandler.GetUserOrders)
+	admin.Put("/users/:id/unblock", deps.AdminUserHandler.UnblockUser)
 
 	// Orders
 	admin.Get("/orders", deps.OrderHandler.ListAllOrders)

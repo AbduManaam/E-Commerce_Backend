@@ -2,6 +2,7 @@ package dto
 
 type AdminUpdateUserRequest struct {
 	Name string `json:"name" validate:"required,min=2,max=50"`
+	// Email string `json:"email" validate:"oneof:USER ADMIN"`
 	Role string `json:"role" validate:"required,oneof=USER ADMIN"`
 }
 

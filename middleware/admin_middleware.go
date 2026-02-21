@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"backend/utils/logging"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -17,7 +18,7 @@ func AdminMiddleware() fiber.Handler {
 			})
 		}
 
-		if role != "admin" {
+		if strings.ToUpper(role) != "ADMIN" {
 			logging.LogWarn("non-admin access attempt", c, fiber.ErrForbidden, "role", role)
 
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
