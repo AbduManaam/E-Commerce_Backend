@@ -41,6 +41,11 @@ var (
 		Msg:  "This order has already been processed and cannot be modified.",
 	}
 
+	ErrAddressLimitReached = &ServiceError{
+    Code: "ADDRESS_LIMIT_REACHED",
+    Msg:  "Address limit reached: Maximum 3 addresses allowed",
+    }
+
 	ErrItemNotCancellable = &ServiceError{
 		Code: "ITEM_NOT_CANCELLABLE",
 		Msg:  "This order item cannot be cancelled in its current state.",

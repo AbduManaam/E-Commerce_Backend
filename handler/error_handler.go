@@ -33,6 +33,9 @@ func HandleError(c *fiber.Ctx, err error) error {
 			status = fiber.StatusBadRequest
 		case "PRODUCT_UNAVAILABLE":
 			status = fiber.StatusGone
+		case "ADDRESS_LIMIT_REACHED":
+			status = fiber.StatusBadRequest
+
 		}
 
 		return c.Status(status).JSON(fiber.Map{

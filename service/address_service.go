@@ -3,7 +3,6 @@ package service
 import (
 	"backend/internal/domain"
 	"backend/repository"
-
 )
 
 type AddressService struct {
@@ -15,6 +14,15 @@ func NewAddressService(addressRepo repository.AddressRepository) *AddressService
 }
 
 func (s *AddressService) Create(userID uint, address *domain.Address) (*domain.Address, error) {
+	
+	existing,err:= s.addressRepo.ListByUser(userID)
+	if err!=nil{
+		return nil,err
+	}
+	if len(existing)>=3{
+		return nil,ErrAddressLimitReached
+	}
+	
 	address.UserID = userID
 
 	if err := s.addressRepo.Create(address); err != nil {
