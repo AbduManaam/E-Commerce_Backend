@@ -64,9 +64,6 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		logging.LogWarn("login body parse failed", c, err)
 		return HandleError(c, service.ErrInvalidInput)
 	}
-fmt.Println("Parsed Email:", req.Email)
-	fmt.Println("Parsed Password:", req.Password)
-
 	if err := validator.Validate.Struct(req); err != nil {
 		return c.Status(400).JSON(fiber.Map{
 			"errors": validator.FormatErrors(err),
@@ -93,12 +90,13 @@ fmt.Println("Parsed Email:", req.Email)
 	logging.LogInfo("login successful", c, "userID", user.ID)
 
 	return c.JSON(fiber.Map{
-		"message":"login successful",
-		"access_token":accessToken,
+		"message":      "login successful",
+		"access_token": accessToken,
 		"user": dto.UserResponse{
 			ID:    user.ID,
 			Name:  user.Name,
 			Email: user.Email,
+			Role:  user.Role,
 		},
 	})
 }

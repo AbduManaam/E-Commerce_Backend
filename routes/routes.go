@@ -39,6 +39,7 @@ func SetUpRoutes(app *fiber.App, deps *Dependencies) {
 
 	authMiddleware := middleware.AuthMiddleware(deps.Cfg, deps.UserRepo)
 	adminMiddleware := middleware.AdminMiddleware()
+	userOnlyMiddleware := middleware.UserOnlyMiddleware()
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
@@ -77,45 +78,44 @@ func SetUpRoutes(app *fiber.App, deps *Dependencies) {
 	// ----------------- API Routes (Authenticated) -----------------
 	api := app.Group("/api", authMiddleware)
 
-	// Addresses
+	// Addresses (mutations require user role; admin read-only)
 	addresses := api.Group("/addresses")
-	addresses.Post("", deps.AddressHandler.Create)
+	addresses.Post("", userOnlyMiddleware, deps.AddressHandler.Create)
 	addresses.Get("", deps.AddressHandler.List)
 	addresses.Get("/:id", deps.AddressHandler.GetByID)
-	addresses.Put("/:id", deps.AddressHandler.Update)
-	addresses.Delete("/:id", deps.AddressHandler.Delete)
-	addresses.Put("/:id/set-default", deps.AddressHandler.SetDefault)
+	addresses.Put("/:id", userOnlyMiddleware, deps.AddressHandler.Update)
+	addresses.Delete("/:id", userOnlyMiddleware, deps.AddressHandler.Delete)
+	addresses.Put("/:id/set-default", userOnlyMiddleware, deps.AddressHandler.SetDefault)
 
-	// Cart
+	// Cart (mutations require user role; admin read-only)
 	cart := api.Group("/cart")
-	cart.Post("", deps.CartHandler.Add)
+	cart.Post("", userOnlyMiddleware, deps.CartHandler.Add)
 	cart.Get("", deps.CartHandler.Get)
-	cart.Put("/item/:itemId", deps.CartHandler.Update)
-	cart.Delete("/item/:itemId", deps.CartHandler.Delete)
+	cart.Put("/item/:itemId", userOnlyMiddleware, deps.CartHandler.Update)
+	cart.Delete("/item/:itemId", userOnlyMiddleware, deps.CartHandler.Delete)
 
-	// Wishlist
+	// Wishlist (mutations require user role; admin read-only)
 	wishlist := api.Group("/wishlist")
-	wishlist.Post("", deps.WishlistHandler.Add)
+	wishlist.Post("", userOnlyMiddleware, deps.WishlistHandler.Add)
 	wishlist.Get("", deps.WishlistHandler.Get)
-	wishlist.Delete("/:product_id", deps.WishlistHandler.Delete)
+	wishlist.Delete("/:product_id", userOnlyMiddleware, deps.WishlistHandler.Delete)
 
-	// Orders
+	// Orders (mutations require user role; admin read-only)
 	orders := api.Group("/orders")
-	orders.Post("", deps.OrderHandler.CreateOrder)
+	orders.Post("", userOnlyMiddleware, deps.OrderHandler.CreateOrder)
 	orders.Get("", deps.OrderHandler.GetUserOrders)
 	orders.Get("/:id", deps.OrderHandler.GetOrder)
-	orders.Put("/:id/cancel", deps.OrderHandler.CancelOrder)
+	orders.Put("/:id/cancel", userOnlyMiddleware, deps.OrderHandler.CancelOrder)
 
 	orderItems := orders.Group("/:order_id/items")
+	orderItems.Get("/", deps.OrderHandler.ListOrderItems)
+	orderItems.Put("/:item_id/cancel", userOnlyMiddleware, deps.OrderHandler.CancelOrderItem)
 
-    orderItems.Get("/", deps.OrderHandler.ListOrderItems)
-    orderItems.Put("/:item_id/cancel", deps.OrderHandler.CancelOrderItem)
 
-
-	// Payments
+	// Payments (mutations require user role; admin read-only)
 	payments := api.Group("/payments")
-	payments.Post("/intent", deps.PaymentHandler.CreatePaymentIntent)
-	payments.Post("/confirm", deps.PaymentHandler.ConfirmPayment)
+	payments.Post("/intent", userOnlyMiddleware, deps.PaymentHandler.CreatePaymentIntent)
+	payments.Post("/confirm", userOnlyMiddleware, deps.PaymentHandler.ConfirmPayment)
 
 	// ----------------- Admin -----------------
 	admin := app.Group("/admin", authMiddleware, adminMiddleware)
