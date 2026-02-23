@@ -3,6 +3,8 @@ package logging
 import (
 	"log/slog"
 	"os"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 // Logger is the global structured logger instance.
@@ -38,7 +40,8 @@ func Init(env string, levelOverride ...string) {
 	}
 
 	opts := &slog.HandlerOptions{
-		Level: level,
+		Level:     level,
+		AddSource: env != "development", // Include file:line in production logs
 	}
 
 	var handler slog.Handler
@@ -60,4 +63,21 @@ func GetLogger() *slog.Logger {
 		Init("development")
 	}
 	return Logger
+}
+
+// WithRequestContext returns a logger enriched with request-scoped fields
+// (request_id, user_id, role) from Fiber context locals.
+// Use this in handlers/services for correlated, structured logging.
+func WithRequestContext(c *fiber.Ctx) *slog.Logger {
+	requestID, _ := c.Locals(RequestIDKey).(string)
+	attrs := []any{"request_id", requestID}
+
+	if uid, ok := c.Locals(UserIDKey).(uint); ok && uid > 0 {
+		attrs = append(attrs, "user_id", uid)
+	}
+	if role, ok := c.Locals(RoleKey).(string); ok && role != "" {
+		attrs = append(attrs, "role", role)
+	}
+
+	return GetLogger().With(attrs...)
 }

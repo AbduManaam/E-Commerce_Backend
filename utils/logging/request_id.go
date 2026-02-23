@@ -12,13 +12,13 @@ const (
 	RoleKey      = "role"
 )
 
-// GenerateRequestID returns a short, unique 8-character hex string
+// GenerateRequestID returns a unique 16-character hex string
 // suitable for tracing a request across log entries.
 func GenerateRequestID() string {
-	b := make([]byte, 4)
+	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
 		// Fallback — should never happen in practice
-		return "00000000"
+		return "0000000000000000"
 	}
 	return hex.EncodeToString(b)
 }

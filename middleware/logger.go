@@ -22,7 +22,6 @@ var skipPaths = map[string]bool{
 	"/test-cors":   true,
 }
 
-
 func RequestLogger() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Skip noisy endpoints
@@ -77,6 +76,11 @@ func RequestLogger() fiber.Handler {
 			"bytes", c.Response().Header.ContentLength(),
 		}
 
+		// Include query string if present
+		if qs := string(c.Request().URI().QueryString()); qs != "" {
+			fields = append(fields, "query", qs)
+		}
+
 		// Add error info if present
 		if chainErr != nil {
 			fields = append(fields, "error", chainErr.Error())
@@ -85,6 +89,8 @@ func RequestLogger() fiber.Handler {
 		switch {
 		case chainErr != nil || status >= 500:
 			logging.LogError("request completed", fields...)
+		case duration > time.Second:
+			logging.LogWarn("slow request", fields...)
 		case status >= 400 && status != 401 && status != 403:
 			logging.LogWarn("request completed", fields...)
 		default:

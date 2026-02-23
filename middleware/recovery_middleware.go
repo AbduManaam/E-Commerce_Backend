@@ -17,6 +17,8 @@ func RecoveryMiddleware() fiber.Handler {
 
 				logging.LogError("panic recovered",
 					"request_id", requestID,
+					"user_id", c.Locals(logging.UserIDKey),
+					"role", c.Locals(logging.RoleKey),
 					"error", fmt.Sprintf("%v", r),
 					"path", c.Path(),
 					"method", c.Method(),
