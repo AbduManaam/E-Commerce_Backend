@@ -9,7 +9,7 @@ import (
 	"backend/utils/email"
 	"backend/utils/logging"
 	cloudinaryutil "backend/utils/utils/cloudinary"
-	"log"
+	"log/slog"
 	"os"
 )
 
@@ -36,7 +36,7 @@ type Container struct {
 func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 
 	// ---------------- LOGGER ----------------
-	logging.Init(cfg.Environment)
+	logging.Init(cfg.Environment, cfg.Log.Level)
 	logger := logging.Logger
 
 	// ---------------- DATABASE ----------------
@@ -56,7 +56,8 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 
 	databases.AutoMigrate(db)
 
-	repoLogger := log.New(os.Stdout, "[SERVICE] ", log.LstdFlags|log.Lshortfile)
+	// Unified structured logger for all services (replaces the old *log.Logger)
+	svcLogger := logger
 
 	// ---------------- REPOSITORIES ----------------
 	authRepo := repository.NewAuthRepository(db)
@@ -72,8 +73,7 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	featureRepo := repository.NewFeatureRepo()
 	reviewRepo := repository.NewReviewRepo()
 
-	var cartRepo repository.CartRepositoryInterface =
-		repository.NewCartRepository(db, logger)
+	var cartRepo repository.CartRepositoryInterface = repository.NewCartRepository(db, logger)
 
 	var productReader repository.ProductReader = productRepo
 	var productWriter repository.ProductWriter = productRepo
@@ -89,7 +89,8 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 		cfg.Cloudinary.APISecret,
 	)
 	if err != nil {
-		log.Fatal(err)
+		logging.LogError("cloudinary init failed", "error", err.Error())
+		os.Exit(1)
 	}
 
 	// ---------------- SERVICES ----------------
@@ -123,7 +124,7 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 	paymentSvc := service.NewPaymentService(
 		paymentRepo,
 		orderRepo,
-		repoLogger,
+		svcLogger,
 	)
 
 	orderSvc := service.NewOrderService(
@@ -133,20 +134,20 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 		cartRepo,
 		addressRepo,
 		paymentSvc,
-		repoLogger,
+		svcLogger,
 	)
 
 	cartSvc := service.NewCartService(
 		cartRepo,
 		productReader,
 		productWriter,
-		repoLogger,
+		svcLogger,
 	)
 
 	wishlistSvc := service.NewWishlistService(
 		wishlistRepo,
 		productReader,
-		repoLogger,
+		svcLogger,
 	)
 
 	categorySvc := service.NewCategoryService(categoryRepo)
@@ -184,3 +185,7 @@ func BuildContainer(cfg *config.AppConfig) (*Container, error) {
 		DBCleanup: sqlDB.Close,
 	}, nil
 }
+
+// slogAdapter wraps *slog.Logger to provide a drop-in for any remaining *log.Logger usage.
+// This is kept as a safety net but should not be needed.
+var _ = func(l *slog.Logger) {}

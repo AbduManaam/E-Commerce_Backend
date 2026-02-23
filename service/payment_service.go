@@ -1,5 +1,3 @@
-
-
 package service
 
 import (
@@ -7,7 +5,7 @@ import (
 	"backend/repository"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"gorm.io/gorm"
@@ -16,13 +14,13 @@ import (
 type PaymentService struct {
 	paymentRepo repository.PaymentRepository
 	orderRepo   repository.OrderRepository
-	logger      *log.Logger
+	logger      *slog.Logger
 }
 
 func NewPaymentService(
 	paymentRepo repository.PaymentRepository,
 	orderRepo repository.OrderRepository,
-	logger *log.Logger,
+	logger *slog.Logger,
 ) *PaymentService {
 	return &PaymentService{
 		paymentRepo: paymentRepo,
@@ -30,7 +28,6 @@ func NewPaymentService(
 		logger:      logger,
 	}
 }
-
 
 // CreatePaymentIntent remains the same
 func (s *PaymentService) CreatePaymentIntent(
@@ -51,7 +48,7 @@ func (s *PaymentService) CreatePaymentIntent(
 	}
 
 	// Check if order is payable
-	if order.Status != domain.OrderStatusPending  {
+	if order.Status != domain.OrderStatusPending {
 		tx.Rollback()
 		return nil, "", errors.New("order is not payable")
 	}
@@ -59,7 +56,7 @@ func (s *PaymentService) CreatePaymentIntent(
 	// Check if payment already exists
 	if existingPayment, err := s.paymentRepo.GetByOrderID(orderID); err == nil {
 		tx.Rollback()
-		s.logger.Printf("Payment already exists: %+v", existingPayment)
+		s.logger.Warn("payment already exists", "order_id", orderID, "payment_id", existingPayment.ID)
 		return nil, "", errors.New("payment already exists for this order")
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		tx.Rollback()
@@ -115,10 +112,9 @@ func (s *PaymentService) CreatePaymentIntent(
 		return nil, "", err
 	}
 
-	s.logger.Printf("PaymentIntent created successfully: paymentID=%d, orderID=%d, method=%s", payment.ID, order.ID, method)
+	s.logger.Info("payment intent created", "payment_id", payment.ID, "order_id", order.ID, "method", method)
 	return payment, clientSecret, nil
 }
-
 
 // ------------------- ConfirmPayment Updated -------------------
 
@@ -129,13 +125,13 @@ func (s *PaymentService) ConfirmPayment(paymentID string, status string) (*domai
 	payment, err := s.paymentRepo.GetByGatewayID(paymentID)
 	if err != nil {
 		tx.Rollback()
-		s.logger.Printf("ConfirmPayment: payment not found for gatewayID=%s", paymentID)
+		s.logger.Warn("payment not found", "gateway_id", paymentID)
 		return nil, err
 	}
 
 	if payment.Status == domain.PaymentStatusPaid {
 		tx.Rollback()
-		s.logger.Printf("ConfirmPayment: payment already marked as paid, paymentID=%d", payment.ID)
+		s.logger.Info("payment already paid", "payment_id", payment.ID)
 		return payment, nil
 	}
 
@@ -154,7 +150,7 @@ func (s *PaymentService) ConfirmPayment(paymentID string, status string) (*domai
 	// Update Payment
 	if err := s.paymentRepo.UpdateTx(tx, payment); err != nil {
 		tx.Rollback()
-		s.logger.Printf("ConfirmPayment: failed to update payment, paymentID=%d, error=%s", payment.ID, err)
+		s.logger.Error("failed to update payment", "payment_id", payment.ID, "error", err)
 		return nil, err
 	}
 
@@ -162,7 +158,7 @@ func (s *PaymentService) ConfirmPayment(paymentID string, status string) (*domai
 	order, err := s.orderRepo.GetByID(payment.OrderID)
 	if err != nil {
 		tx.Rollback()
-		s.logger.Printf("ConfirmPayment: order not found for orderID=%d", payment.OrderID)
+		s.logger.Error("order not found for payment", "order_id", payment.OrderID)
 		return nil, err
 	}
 
@@ -175,55 +171,54 @@ func (s *PaymentService) ConfirmPayment(paymentID string, status string) (*domai
 
 	if err := s.orderRepo.UpdateTx(tx, order); err != nil {
 		tx.Rollback()
-		s.logger.Printf("ConfirmPayment: failed to update order, orderID=%d, error=%s", order.ID, err)
+		s.logger.Error("failed to update order", "order_id", order.ID, "error", err)
 		return nil, err
 	}
 
 	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
-		s.logger.Printf("ConfirmPayment: failed to commit transaction, paymentID=%d, error=%s", payment.ID, err)
+		s.logger.Error("failed to commit transaction", "payment_id", payment.ID, "error", err)
 		return nil, err
 	}
 
-	s.logger.Printf("ConfirmPayment: payment & order updated successfully, paymentID=%d, orderID=%d", payment.ID, order.ID)
+	s.logger.Info("payment confirmed", "payment_id", payment.ID, "order_id", order.ID)
 	return payment, nil
 }
 
-
-//RefundPayment 
+// RefundPayment
 func (s *PaymentService) RefundPayment(orderID uint) error {
-    tx := s.paymentRepo.GetDB().Begin()
+	tx := s.paymentRepo.GetDB().Begin()
 
-    payment, err := s.paymentRepo.GetByOrderID(orderID)
-    if err != nil {
-        tx.Rollback()
-        return fmt.Errorf("payment not found for order %d", orderID)
-    }
+	payment, err := s.paymentRepo.GetByOrderID(orderID)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("payment not found for order %d", orderID)
+	}
 
-    if payment.Status != domain.PaymentStatusPaid {
-        tx.Rollback()
-        return errors.New("only paid payments can be refunded")
-    }
+	if payment.Status != domain.PaymentStatusPaid {
+		tx.Rollback()
+		return errors.New("only paid payments can be refunded")
+	}
 
-    payment.Status = domain.PaymentStatusRefunded
-    if err := s.paymentRepo.UpdateTx(tx, payment); err != nil {
-        tx.Rollback()
-        return err
-    }
+	payment.Status = domain.PaymentStatusRefunded
+	if err := s.paymentRepo.UpdateTx(tx, payment); err != nil {
+		tx.Rollback()
+		return err
+	}
 
-    order, err := s.orderRepo.GetByID(orderID)
-    if err != nil {
-        tx.Rollback()
-        return err
-    }
+	order, err := s.orderRepo.GetByID(orderID)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
 
-    order.PaymentStatus = domain.PaymentStatusRefunded
-    order.Status = "refunded" // ← ADD THIS so analytics can track it
+	order.PaymentStatus = domain.PaymentStatusRefunded
+	order.Status = "refunded" // ← ADD THIS so analytics can track it
 
-    if err := s.orderRepo.UpdateTx(tx, order); err != nil {
-        tx.Rollback()
-        return err
-    }
+	if err := s.orderRepo.UpdateTx(tx, order); err != nil {
+		tx.Rollback()
+		return err
+	}
 
-    return tx.Commit().Error
+	return tx.Commit().Error
 }

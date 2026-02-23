@@ -28,7 +28,7 @@ func (h *AdminUserHandler) BlockUser(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	userID, err := strconv.ParseUint(idParam, 10, 64)
 	if err != nil {
-		logging.LogWarn("block user failed: invalid id", c, err)
+		logging.LogWarn("block user failed: invalid id", "error", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user id"})
 	}
 
@@ -41,13 +41,13 @@ if !ok || !isAdmin {
 }
 
 if err := h.userSvc.BlockUser(isAdmin, uint(userID)); err != nil {
-    logging.LogWarn("block user failed: service error", c, err, "userID", userID)
+    logging.LogWarn("block user failed: service error", "error", err, "userID", userID)
     return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
         "error": "Unable to block user due to internal error",
     })
 }
 
-logging.LogInfo("user blocked successfully", c, "userID", userID)
+logging.LogInfo("user blocked successfully", "userID", userID)
 return c.JSON(fiber.Map{"message": "user blocked successfully"})
 
 }
@@ -56,13 +56,13 @@ func (h *AdminUserHandler) UpdateUser(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	userID, err := strconv.ParseUint(idParam, 10, 64)
 	if err != nil {
-		logging.LogWarn("update user failed: invalid ID", c, err)
+		logging.LogWarn("update user failed: invalid ID", "error", err)
 		return c.Status(400).JSON(fiber.Map{"error": "invalid user id"})
 	}
 
 	var req dto.AdminUpdateUserRequest
 	if err := c.BodyParser(&req); err != nil {
-		logging.LogWarn("update user failed: body parse", c, err, "userID", userID)
+		logging.LogWarn("update user failed: body parse", "error", err, "userID", userID)
 		return c.Status(400).JSON(fiber.Map{  "error": "Invalid request body. Please check the input format."})
 	}
 
@@ -74,11 +74,11 @@ func (h *AdminUserHandler) UpdateUser(c *fiber.Ctx) error {
 
 	isAdmin := c.Locals("isAdmin").(bool)
 	if err := h.userSvc.AdminUpdateUser(isAdmin, uint(userID), req.Name, req.Role); err != nil {
-		logging.LogWarn("update user failed: service error", c, err, "userID", userID, "role", req.Role)
+		logging.LogWarn("update user failed: service error", "error", err, "userID", userID, "role", req.Role)
 		return c.Status(403).JSON(fiber.Map{ "error": "Only admins can block users"})
 	}
 
-	logging.LogInfo("user updated successfully", c, "userID", userID, "name", req.Name, "role", req.Role)
+	logging.LogInfo("user updated successfully", "userID", userID, "name", req.Name, "role", req.Role)
 	return c.JSON(fiber.Map{"message": "user updated successfully"})
 }
 func (h *AdminUserHandler ) ListUsers(c *fiber.Ctx) error {
@@ -150,7 +150,7 @@ func (h *AdminUserHandler) UnblockUser(c *fiber.Ctx) error {
     idParam := c.Params("id")
     userID, err := strconv.ParseUint(idParam, 10, 64)
     if err != nil {
-        logging.LogWarn("unblock user failed: invalid id", c, err)
+        logging.LogWarn("unblock user failed: invalid id", "error", err)
         return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid user id"})
     }
 
@@ -160,10 +160,10 @@ func (h *AdminUserHandler) UnblockUser(c *fiber.Ctx) error {
     }
 
     if err := h.userSvc.UnblockUser(isAdmin, uint(userID)); err != nil {
-        logging.LogWarn("unblock user failed: service error", c, err, "userID", userID)
+        logging.LogWarn("unblock user failed: service error", "error", err, "userID", userID)
         return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Unable to unblock user"})
     }
 
-    logging.LogInfo("user unblocked successfully", c, "userID", userID)
+    logging.LogInfo("user unblocked successfully", "userID", userID)
     return c.JSON(fiber.Map{"message": "user unblocked successfully"})
 }

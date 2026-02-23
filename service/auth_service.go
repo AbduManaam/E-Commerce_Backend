@@ -2,8 +2,6 @@ package service
 
 import (
 	"errors"
-	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -22,11 +20,10 @@ import (
 )
 
 type AuthService struct {
-	userRepo   repository.UserRepository
-	authRepo repository.AuthRepository  
-	jwtConfig  *config.JWTConfig
+	userRepo  repository.UserRepository
+	authRepo  repository.AuthRepository
+	jwtConfig *config.JWTConfig
 	emailSvc  email.Service
-	logger     *log.Logger
 }
 
 func NewAuthService(
@@ -37,13 +34,11 @@ func NewAuthService(
 ) *AuthService {
 	return &AuthService{
 		userRepo:  userRepo,
-		authRepo: authRepo,
+		authRepo:  authRepo,
 		jwtConfig: jwtConfig,
 		emailSvc:  emailSvc,
-		logger:    log.New(os.Stdout, "AuthService: ", log.LstdFlags),
 	}
 }
-
 
 // SIGNUP with OTP
 func (s *AuthService) Signup(user *domain.User) error {
@@ -53,8 +48,8 @@ func (s *AuthService) Signup(user *domain.User) error {
 	if !isValidEmail(user.Email) {
 		return ErrInvalidInput
 	}
-	
-    if !validator.IsValidPassword(user.Password){
+
+	if !validator.IsValidPassword(user.Password) {
 		return ErrInvalidInput.WithContext("weak password")
 	}
 
@@ -90,7 +85,7 @@ func (s *AuthService) Signup(user *domain.User) error {
 	}
 
 	if err := s.emailSvc.SendVerificationOTP(user.Email, user.Name, otpCode); err != nil {
-		s.logger.Printf("Failed to send OTP to %s: %v", user.Email, err)
+		logging.LogWarn("failed to send OTP", "email", user.Email, "error", err.Error())
 		return &ServiceError{Code: "EMAIL_SEND_FAILED", Msg: "Failed to send OTP email"}
 	}
 
@@ -98,24 +93,24 @@ func (s *AuthService) Signup(user *domain.User) error {
 }
 
 func (s *AuthService) VerifyOTP(userEmail, otpCode string) error {
-	
+
 	if userEmail == "" || otpCode == "" {
 		return ErrInvalidInput
 	}
-	
+
 	user, err := s.userRepo.GetByEmail(userEmail)
 	if err != nil {
-		s.logger.Println("[VerifyOTP] DB error fetching user:", err)
-		return err 
-	}	
+		logging.LogDebug("VerifyOTP: DB error fetching user", "error", err)
+		return err
+	}
 
 	if user == nil {
-		s.logger.Println("[VerifyOTP] user not found:", userEmail)
+		logging.LogDebug("VerifyOTP: user not found", "email", userEmail)
 		return ErrUserNotFound
 	}
 
 	if user.IsVerified {
-		s.logger.Println("[VerifyOTP] already verified:", userEmail)
+		logging.LogDebug("VerifyOTP: already verified", "email", userEmail)
 		return &ServiceError{
 			Code: "ALREADY_VERIFIED",
 			Msg:  "User already verified",
@@ -123,7 +118,7 @@ func (s *AuthService) VerifyOTP(userEmail, otpCode string) error {
 	}
 
 	if time.Now().After(user.OTPExpiry) {
-		s.logger.Println("[VerifyOTP] OTP expired for:", userEmail)
+		logging.LogDebug("VerifyOTP: OTP expired", "email", userEmail)
 		return &ServiceError{
 			Code: "OTP_EXPIRED",
 			Msg:  "OTP expired",
@@ -134,7 +129,7 @@ func (s *AuthService) VerifyOTP(userEmail, otpCode string) error {
 		[]byte(user.OTP),
 		[]byte(otpCode),
 	); err != nil {
-		s.logger.Println("[VerifyOTP] invalid OTP attempt for:", userEmail)
+		logging.LogWarn("VerifyOTP: invalid OTP attempt", "email", userEmail)
 		return &ServiceError{
 			Code: "INVALID_OTP",
 			Msg:  "Invalid OTP",
@@ -147,167 +142,161 @@ func (s *AuthService) VerifyOTP(userEmail, otpCode string) error {
 	user.UpdatedAt = time.Now()
 
 	if err := s.userRepo.Update(user); err != nil {
-		s.logger.Println("[VerifyOTP] failed to update user:", err)
+		logging.LogError("VerifyOTP: failed to update user", "error", err)
 		return err
 	}
 
-	s.logger.Println("[VerifyOTP] user verified successfully:", userEmail)
+	logging.LogInfo("VerifyOTP: user verified successfully", "email", userEmail)
 	return nil
 }
 
-
 // LOGIN
 func (s *AuthService) Login(userEmail, password string) (*domain.User, string, string, error) {
-    if !isValidEmail(userEmail) || password == "" {
-        return nil, "", "", ErrInvalidInput
-    }
+	if !isValidEmail(userEmail) || password == "" {
+		return nil, "", "", ErrInvalidInput
+	}
 
-    user, err := s.userRepo.GetByEmail(userEmail)
-    if err != nil {
-        logging.LogWarn("login failed: repo error", nil, err, "email", userEmail)
-        return nil, "", "", ErrInvalidLogin
-    }
+	user, err := s.userRepo.GetByEmail(userEmail)
+	if err != nil {
+		logging.LogWarn("login failed: repo error", "email", userEmail, "error", err)
+		return nil, "", "", ErrInvalidLogin
+	}
 
-    if user == nil {
-        logging.LogWarn("user not found", nil, err, "Email", userEmail)
-        return nil, "", "", ErrInvalidLogin.WithContext("")
-    }
+	if user == nil {
+		logging.LogWarn("user not found", "email", userEmail)
+		return nil, "", "", ErrInvalidLogin.WithContext("")
+	}
 
-    // Check if user is blocked
-    if user.IsBlocked {
-        return nil, "", "", ErrUserBlocked
-    }
-    if !user.IsVerified {
-        return nil, "", "", &ServiceError{
-            Code: "EMAIL_NOT_VERIFIED",
-            Msg:  "Please verify your email address before logging in",
-        }
-    }
+	// Check if user is blocked
+	if user.IsBlocked {
+		return nil, "", "", ErrUserBlocked
+	}
+	if !user.IsVerified {
+		return nil, "", "", &ServiceError{
+			Code: "EMAIL_NOT_VERIFIED",
+			Msg:  "Please verify your email address before logging in",
+		}
+	}
 
-    if !hash.CheckPassword(password, user.Password) {
-        return nil, "", "", ErrInvalidLogin
-    }
+	if !hash.CheckPassword(password, user.Password) {
+		return nil, "", "", ErrInvalidLogin
+	}
 
-    // Generate JWT tokens
-    accessToken, err := utils.GenerateAccessToken(
-        user.ID,
-        user.Role,
-        s.jwtConfig.AccessSecret,
-        time.Duration(s.jwtConfig.AccessExpiry)*time.Second,
-    )
-    if err != nil {
-        return nil, "", "", err
-    }
+	// Generate JWT tokens
+	accessToken, err := utils.GenerateAccessToken(
+		user.ID,
+		user.Role,
+		s.jwtConfig.AccessSecret,
+		time.Duration(s.jwtConfig.AccessExpiry)*time.Second,
+	)
+	if err != nil {
+		return nil, "", "", err
+	}
 
-    refreshToken, err := utils.GenerateRefreshToken(
-        user.ID,
-        user.Role,
-        s.jwtConfig.RefreshSecret,
-        time.Duration(s.jwtConfig.RefreshExpiry)*time.Second,
-    )
-    if err != nil {
-        return nil, "", "", err
-    }
+	refreshToken, err := utils.GenerateRefreshToken(
+		user.ID,
+		user.Role,
+		s.jwtConfig.RefreshSecret,
+		time.Duration(s.jwtConfig.RefreshExpiry)*time.Second,
+	)
+	if err != nil {
+		return nil, "", "", err
+	}
 
-    // Store refresh token in database
-    tokenHash := utils.HashString(refreshToken) // You need to create this helper
-    expiresAt := time.Now().Add(time.Duration(s.jwtConfig.RefreshExpiry) * time.Second)
-    if err := s.authRepo.SaveRefreshToken(user.ID, tokenHash, expiresAt); err != nil {
-        return nil, "", "", err
-    }
+	// Store refresh token in database
+	tokenHash := utils.HashString(refreshToken) // You need to create this helper
+	expiresAt := time.Now().Add(time.Duration(s.jwtConfig.RefreshExpiry) * time.Second)
+	if err := s.authRepo.SaveRefreshToken(user.ID, tokenHash, expiresAt); err != nil {
+		return nil, "", "", err
+	}
 
-    return user, accessToken, refreshToken, nil
+	return user, accessToken, refreshToken, nil
 }
 
-
-//Logout
-func(s *AuthService)Logout(refreshToken string)error{
-	if refreshToken==""{
+// Logout
+func (s *AuthService) Logout(refreshToken string) error {
+	if refreshToken == "" {
 		logging.LogWarn(
 			"Logout failed: empty refresh token",
-			nil,   
-			nil,   
 			"action", "logout",
 		)
 		return ErrInvalidInput
 	}
-	tokenHash:= utils.HashString(refreshToken)
-	 return s.authRepo.DeleteRefreshToken(tokenHash)
+	tokenHash := utils.HashString(refreshToken)
+	return s.authRepo.DeleteRefreshToken(tokenHash)
 }
-
-
 
 // REFRESH TOKEN
 func (s *AuthService) RefreshToken(refreshToken string) (string, string, error) {
-    // First check if token exists in DB
-    tokenHash := utils.HashString(refreshToken)
-    storedToken, err := s.authRepo.GetRefreshToken(tokenHash)
-    if err != nil || storedToken == nil {
-        return "", "", ErrInvalidToken
-    }
-    
-    // Check expiry
-    if time.Now().After(storedToken.ExpiresAt) {
-        s.authRepo.DeleteRefreshToken(tokenHash)
-        return "", "", ErrInvalidToken
-    }
+	// First check if token exists in DB
+	tokenHash := utils.HashString(refreshToken)
+	storedToken, err := s.authRepo.GetRefreshToken(tokenHash)
+	if err != nil || storedToken == nil {
+		return "", "", ErrInvalidToken
+	}
 
-    // Now validate the JWT token
-    claims, err := utils.ValidateRefreshToken(refreshToken, s.jwtConfig.RefreshSecret)
-    if err != nil {
-        // Also delete invalid token from database
-        s.authRepo.DeleteRefreshToken(tokenHash)
-        return "", "", ErrInvalidToken
-    }
+	// Check expiry
+	if time.Now().After(storedToken.ExpiresAt) {
+		s.authRepo.DeleteRefreshToken(tokenHash)
+		return "", "", ErrInvalidToken
+	}
 
-    user, err := s.userRepo.GetByID(claims.UserID)
-    if err != nil || user == nil {
-        return "", "", ErrUserNotFound
-    }
+	// Now validate the JWT token
+	claims, err := utils.ValidateRefreshToken(refreshToken, s.jwtConfig.RefreshSecret)
+	if err != nil {
+		// Also delete invalid token from database
+		s.authRepo.DeleteRefreshToken(tokenHash)
+		return "", "", ErrInvalidToken
+	}
 
-    if user.IsBlocked {
-		 _ = s.authRepo.DeleteAllByUserID(user.ID)
-        return "", "", ErrForbidden.WithContext("account suspended")
-    }
+	user, err := s.userRepo.GetByID(claims.UserID)
+	if err != nil || user == nil {
+		return "", "", ErrUserNotFound
+	}
 
-    newAccessToken, err := utils.GenerateAccessToken(
-        user.ID,
-        user.Role,
-        s.jwtConfig.AccessSecret,
-        time.Duration(s.jwtConfig.AccessExpiry)*time.Second,
-    )
-    if err != nil {
-        return "", "", err
-    }
+	if user.IsBlocked {
+		_ = s.authRepo.DeleteAllByUserID(user.ID)
+		return "", "", ErrForbidden.WithContext("account suspended")
+	}
 
-    newRefreshToken, err := utils.GenerateRefreshToken(
-        user.ID,
-        user.Role,
-        s.jwtConfig.RefreshSecret,
-        time.Duration(s.jwtConfig.RefreshExpiry)*time.Second,
-    )
-    if err != nil {
-        return "", "", err
-    }
+	newAccessToken, err := utils.GenerateAccessToken(
+		user.ID,
+		user.Role,
+		s.jwtConfig.AccessSecret,
+		time.Duration(s.jwtConfig.AccessExpiry)*time.Second,
+	)
+	if err != nil {
+		return "", "", err
+	}
 
-    // Delete old token and save new one
-    s.authRepo.DeleteRefreshToken(tokenHash)
-    newTokenHash := utils.HashString(newRefreshToken)
-    expiresAt := time.Now().Add(time.Duration(s.jwtConfig.RefreshExpiry) * time.Second)
-    s.authRepo.SaveRefreshToken(claims.UserID, newTokenHash, expiresAt)
+	newRefreshToken, err := utils.GenerateRefreshToken(
+		user.ID,
+		user.Role,
+		s.jwtConfig.RefreshSecret,
+		time.Duration(s.jwtConfig.RefreshExpiry)*time.Second,
+	)
+	if err != nil {
+		return "", "", err
+	}
 
-    return newAccessToken, newRefreshToken, nil
+	// Delete old token and save new one
+	s.authRepo.DeleteRefreshToken(tokenHash)
+	newTokenHash := utils.HashString(newRefreshToken)
+	expiresAt := time.Now().Add(time.Duration(s.jwtConfig.RefreshExpiry) * time.Second)
+	s.authRepo.SaveRefreshToken(claims.UserID, newTokenHash, expiresAt)
+
+	return newAccessToken, newRefreshToken, nil
 }
+
 //-----------------------------------------------------
 
 func (s *AuthService) RefreshExpiry() int {
 	return s.jwtConfig.RefreshExpiry
 }
 
-
 // Forgot Password with OTP
-func (s *AuthService) ForgotPassword(userEmail  string) error {
-	user, err := s.userRepo.GetByEmail(userEmail )
+func (s *AuthService) ForgotPassword(userEmail string) error {
+	user, err := s.userRepo.GetByEmail(userEmail)
 	if err != nil || user == nil {
 		return nil
 	}
@@ -318,7 +307,7 @@ func (s *AuthService) ForgotPassword(userEmail  string) error {
 
 	// Generate OTP
 	otpCode := otp.Generate()
-    otpHash, _ := otp.HashOTP(otpCode)
+	otpHash, _ := otp.HashOTP(otpCode)
 
 	user.OTP = string(otpHash)
 	user.OTPExpiry = otp.Expiry()
@@ -329,8 +318,8 @@ func (s *AuthService) ForgotPassword(userEmail  string) error {
 	}
 
 	// Send OTP email
-	if err :=s.emailSvc.SendVerificationOTP(user.Email, user.Name, otpCode); err != nil {
-		s.logger.Printf("Failed to send password reset OTP to %s: %v", user.Email, err)
+	if err := s.emailSvc.SendVerificationOTP(user.Email, user.Name, otpCode); err != nil {
+		logging.LogWarn("failed to send password reset OTP", "email", user.Email, "error", err.Error())
 		return &ServiceError{
 			Code: "EMAIL_SEND_FAILED",
 			Msg:  "Failed to send password reset email",
@@ -358,8 +347,8 @@ func (s *AuthService) ResetPassword(userEmail, otpCode, newPassword string) erro
 			Msg:  "OTP expired",
 		}
 	}
-	if !validator.IsValidPassword(newPassword){
-    return ErrWeakPassword
+	if !validator.IsValidPassword(newPassword) {
+		return ErrWeakPassword
 
 	}
 
@@ -403,12 +392,12 @@ func (s *AuthService) ChangePassword(
 		return ErrInvalidInput
 	}
 
-	if oldPassword == newPassword{
+	if oldPassword == newPassword {
 		return ErrPasswordReUse
 	}
 	if !validator.IsValidPassword(newPassword) {
-    return ErrWeakPassword
-}
+		return ErrWeakPassword
+	}
 
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil || user == nil {
@@ -431,9 +420,6 @@ func (s *AuthService) ChangePassword(
 	return s.userRepo.UpdatePassword(userID, hashed)
 }
 
-
-
-
 //  basic email format validation
 // func isValidEmail(email string) bool {
 // 	if len(email) < 5 || !contains(email, "@") {
@@ -442,10 +428,6 @@ func (s *AuthService) ChangePassword(
 // 	return true
 // }
 // func contains(s, sub string) bool { return len(s) >= len(sub) && (s[0:len(sub)] == sub || contains(s[1:], sub)) }
-
-
- 
-
 
 func isValidEmail(email string) bool {
 	if len(email) < 6 {
@@ -479,7 +461,7 @@ func isValidEmail(email string) bool {
 		"gmail.cm":  true,
 		"gamil.com": true,
 		"gmial.com": true,
-		"gmial.om": true,
+		"gmial.om":  true,
 	}
 
 	if blockedDomains[domain] {
@@ -489,11 +471,9 @@ func isValidEmail(email string) bool {
 	return true
 }
 
-
-
 // ResendVerificationEmail (if needed)
-func (s *AuthService) ResendVerificationEmail(userEmail  string) error {
-	user, err := s.userRepo.GetByEmail(userEmail )
+func (s *AuthService) ResendVerificationEmail(userEmail string) error {
+	user, err := s.userRepo.GetByEmail(userEmail)
 	if err != nil {
 		return nil // Don't reveal if user exists
 	}
@@ -505,7 +485,7 @@ func (s *AuthService) ResendVerificationEmail(userEmail  string) error {
 	// Generate new OTP
 	otpCode := otp.Generate()
 
-otpHash, _ := otp.HashOTP(otpCode)
+	otpHash, _ := otp.HashOTP(otpCode)
 	user.OTP = string(otpHash)
 	user.OTPExpiry = otp.Expiry()
 	user.UpdatedAt = time.Now()
@@ -516,7 +496,7 @@ otpHash, _ := otp.HashOTP(otpCode)
 
 	// Send OTP email
 	if err := s.emailSvc.SendVerificationOTP(user.Email, user.Name, otpCode); err != nil {
-		s.logger.Printf("Failed to send verification OTP to %s: %v", user.Email, err)
+		logging.LogWarn("failed to send verification OTP", "email", user.Email, "error", err.Error())
 		return &ServiceError{
 			Code: "EMAIL_SEND_FAILED",
 			Msg:  "Failed to send verification email",

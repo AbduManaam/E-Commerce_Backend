@@ -1,9 +1,9 @@
 package utils
 
 import (
+	"backend/utils/logging"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -34,7 +34,7 @@ func GenerateAccessToken(userID uint, role, accessSecret string, accessExpiry ti
 		return "", fmt.Errorf("failed to sign access token: %w", err)
 	}
 
-	log.Printf("Generated access token: userID=%d role=%s expiresAt=%v", userID, role, claims.ExpiresAt.Time)
+	logging.LogDebug("access token generated", "user_id", userID, "role", role)
 	return signed, nil
 }
 
@@ -46,26 +46,25 @@ func ValidateAccessToken(tokenStr, accessSecret string) (*Claims, error) {
 		return []byte(accessSecret), nil
 	})
 	if err != nil {
-		// jwt/v5 returns specific errors
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			log.Printf("Access token expired: %v", err)
+			logging.LogDebug("access token expired", "error", err)
 			return nil, errors.New("token expired")
 		}
 		if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
-			log.Printf("Access token signature invalid: %v", err)
+			logging.LogWarn("access token signature invalid", "error", err)
 			return nil, errors.New("invalid token signature")
 		}
-		log.Printf("Access token parse error: %v", err)
+		logging.LogDebug("access token parse error", "error", err)
 		return nil, errors.New("invalid token")
 	}
 
 	claims, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
-		log.Printf("Access token claims invalid or token not valid")
+		logging.LogWarn("access token claims invalid")
 		return nil, errors.New("invalid token")
 	}
 
-	log.Printf("Access token valid: userID=%d role=%s expiresAt=%v", claims.UserID, claims.Role, claims.ExpiresAt.Time)
+	logging.LogDebug("access token valid", "user_id", claims.UserID, "role", claims.Role)
 	return claims, nil
 }
 
@@ -88,7 +87,7 @@ func GenerateRefreshToken(userID uint, role, refreshSecret string, refreshExpiry
 		return "", fmt.Errorf("failed to sign refresh token: %w", err)
 	}
 
-	log.Printf("Generated refresh token: userID=%d role=%s expiresAt=%v", userID, role, claims.ExpiresAt.Time)
+	logging.LogDebug("refresh token generated", "user_id", userID, "role", role)
 	return signed, nil
 }
 
@@ -101,23 +100,23 @@ func ValidateRefreshToken(tokenStr, refreshSecret string) (*Claims, error) {
 	})
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			log.Printf("Refresh token expired: %v", err)
+			logging.LogDebug("refresh token expired", "error", err)
 			return nil, errors.New("token expired")
 		}
 		if errors.Is(err, jwt.ErrTokenSignatureInvalid) {
-			log.Printf("Refresh token signature invalid: %v", err)
+			logging.LogWarn("refresh token signature invalid", "error", err)
 			return nil, errors.New("invalid token signature")
 		}
-		log.Printf("Refresh token parse error: %v", err)
+		logging.LogDebug("refresh token parse error", "error", err)
 		return nil, errors.New("invalid token")
 	}
 
 	claims, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
-		log.Printf("Refresh token claims invalid or token not valid")
+		logging.LogWarn("refresh token claims invalid")
 		return nil, errors.New("invalid token")
 	}
 
-	log.Printf("Refresh token valid: userID=%d role=%s expiresAt=%v", claims.UserID, claims.Role, claims.ExpiresAt.Time)
+	logging.LogDebug("refresh token valid", "user_id", claims.UserID, "role", claims.Role)
 	return claims, nil
 }

@@ -1,15 +1,11 @@
-
 package middleware
 
 import (
-	"errors"
-	"log"
-	"strings"
-
 	"backend/config"
 	"backend/repository"
 	"backend/utils"
 	"backend/utils/logging"
+	"errors"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -17,26 +13,41 @@ import (
 
 func AuthMiddleware(cfg *config.AppConfig, userRepo repository.UserRepository) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		requestID, _ := c.Locals(logging.RequestIDKey).(string)
+
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
-			logging.LogWarn("missing authorization header", c, fiber.ErrUnauthorized)
+			logging.LogWarn("missing authorization header",
+				"request_id", requestID,
+				"path", c.Path(),
+				"ip", c.IP(),
+			)
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "missing authorization header",
 			})
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			logging.LogWarn("invalid authorization format", c, fiber.ErrUnauthorized)
+		// Validate format: "Bearer <token>"
+		if len(authHeader) < 8 || authHeader[:7] != "Bearer " {
+			logging.LogWarn("invalid authorization format",
+				"request_id", requestID,
+				"path", c.Path(),
+			)
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "invalid authorization format",
 			})
 		}
 
+		tokenStr := authHeader[7:]
+
 		// Validate the access token
-		claims, err := utils.ValidateAccessToken(parts[1], cfg.JWT.AccessSecret)
+		claims, err := utils.ValidateAccessToken(tokenStr, cfg.JWT.AccessSecret)
 		if err != nil {
-			log.Printf("token validation error: %v", err)
+			logging.LogWarn("token validation failed",
+				"request_id", requestID,
+				"error", err.Error(),
+				"path", c.Path(),
+			)
 
 			// Handle specific JWT errors
 			if errors.Is(err, jwt.ErrTokenExpired) {
@@ -69,9 +80,10 @@ func AuthMiddleware(cfg *config.AppConfig, userRepo repository.UserRepository) f
 			c.ClearCookie("access_token")
 			c.ClearCookie("refresh_token")
 
-			logging.LogWarn("blocked user access attempt", c, nil,
-				"userID", user.ID,
-				"ip", c.IP(),
+			logging.LogWarn("blocked user access attempt",
+				"request_id", requestID,
+				"user_id", user.ID,
+				"path", c.Path(),
 			)
 
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
@@ -81,14 +93,9 @@ func AuthMiddleware(cfg *config.AppConfig, userRepo repository.UserRepository) f
 		}
 
 		// Attach user info to context
-		c.Locals("userID", claims.UserID)
-		c.Locals("role", claims.Role)
+		c.Locals(logging.UserIDKey, claims.UserID)
+		c.Locals(logging.RoleKey, claims.Role)
 		c.Locals("isAdmin", claims.Role == "admin")
-
-		logging.LogInfo("authenticated request", c,
-			"userID", claims.UserID,
-			"role", claims.Role,
-		)
 
 		return c.Next()
 	}

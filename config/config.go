@@ -24,13 +24,13 @@ type DatabaseConfig struct {
 }
 
 type JWTConfig struct {
-	AccessSecret string `yaml:"access_secret"`
+	AccessSecret  string `yaml:"access_secret"`
 	RefreshSecret string `yaml:"refresh_secret"`
-	AccessExpiry int    `yaml:"access_expiry"`
+	AccessExpiry  int    `yaml:"access_expiry"`
 	RefreshExpiry int    `yaml:"refresh_expiry"`
 }
 
-type SMTPConfig struct{
+type SMTPConfig struct {
 	Host     string `yaml:"host"`
 	Port     int    `yaml:"port"`
 	Username string `yaml:"username"`
@@ -38,23 +38,25 @@ type SMTPConfig struct{
 	From     string `yaml:"from"`
 }
 
-type AppConfig struct {
-	Environment string        `yaml:"environment"`
-	Server   ServerConfig   `yaml:"server"`
-	Database DatabaseConfig `yaml:"database"`
-	JWT      JWTConfig      `yaml:"jwt"`
-	SMTP     SMTPConfig     `yaml:"smtp"`
-	Cloudinary CloudinaryConfig `yaml:"cloudinary"`
+type LogConfig struct {
+	Level string `yaml:"level"` // "debug", "info", "warn", "error" — overrides environment default
+}
 
+type AppConfig struct {
+	Environment string           `yaml:"environment"`
+	Server      ServerConfig     `yaml:"server"`
+	Database    DatabaseConfig   `yaml:"database"`
+	JWT         JWTConfig        `yaml:"jwt"`
+	SMTP        SMTPConfig       `yaml:"smtp"`
+	Cloudinary  CloudinaryConfig `yaml:"cloudinary"`
+	Log         LogConfig        `yaml:"log"`
 }
 
 type CloudinaryConfig struct {
-    CloudName string `yaml:"cloud_name"`
-    APIKey    string `yaml:"api_key"`
-    APISecret string `yaml:"api_secret"`
+	CloudName string `yaml:"cloud_name"`
+	APIKey    string `yaml:"api_key"`
+	APISecret string `yaml:"api_secret"`
 }
-
-
 
 func LoadConfig(path string) (*AppConfig, error) {
 	cfg := &AppConfig{}
@@ -68,36 +70,36 @@ func LoadConfig(path string) (*AppConfig, error) {
 		return nil, err
 	}
 
-	if err:= cfg.validate();err!=nil{
-		return nil,err
+	if err := cfg.validate(); err != nil {
+		return nil, err
 	}
 
 	log.Println("✅ Config loaded")
 	return cfg, nil
 }
 
-func(c *AppConfig) validate()error{
+func (c *AppConfig) validate() error {
 
 	//Server
-    if c.Server.Port<=0{
+	if c.Server.Port <= 0 {
 		return errors.New("server port must be greater than 0")
 	}
-	
+
 	//Database
-	if c.Database.Host==""|| c.Database.User==""|| c.Database.DBName==""|| c.Database.Port<=0{
+	if c.Database.Host == "" || c.Database.User == "" || c.Database.DBName == "" || c.Database.Port <= 0 {
 		return errors.New("database host, user, and dbname are required and  port must be greater than 0")
 	}
 
 	//JWT
-	if c.JWT.AccessSecret==""|| c.JWT.RefreshSecret==""{
+	if c.JWT.AccessSecret == "" || c.JWT.RefreshSecret == "" {
 		return errors.New("jwt secret must not be empty")
 	}
-	if c.JWT.AccessExpiry<=0 || c.JWT.RefreshExpiry<=0{
+	if c.JWT.AccessExpiry <= 0 || c.JWT.RefreshExpiry <= 0 {
 		return errors.New("jwt expiry must be greater than 0")
 	}
 
 	//SMTP
-	if c.SMTP.Host!="" && c.SMTP.Port<=0{
+	if c.SMTP.Host != "" && c.SMTP.Port <= 0 {
 		return errors.New("smt.port must be greater than 0")
 	}
 

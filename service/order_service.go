@@ -5,18 +5,18 @@ import (
 	"backend/internal/domain"
 	"backend/repository"
 	"errors"
-	"log"
+	"log/slog"
 	"time"
 )
 
 type OrderService struct {
-	orderRepo    repository.OrderRepository	
+	orderRepo    repository.OrderRepository
 	productRead  repository.ProductReader
 	productWrite repository.ProductWriter
 	cartRepo     repository.CartRepositoryInterface
-	addressRepo  repository.AddressRepository 
-	paymentSvc   *PaymentService 
-	logger       *log.Logger
+	addressRepo  repository.AddressRepository
+	paymentSvc   *PaymentService
+	logger       *slog.Logger
 }
 
 func NewOrderService(
@@ -26,7 +26,7 @@ func NewOrderService(
 	cartRepo repository.CartRepositoryInterface,
 	addressRepo repository.AddressRepository,
 	paymentSvc *PaymentService,
-	logger *log.Logger,
+	logger *slog.Logger,
 ) *OrderService {
 	return &OrderService{
 		orderRepo:    orderRepo,
@@ -126,7 +126,7 @@ func (s *OrderService) CreateOrder(
 			} else {
 				unitPrice = price
 			}
-			
+
 			// Calculate final price with any active discounts
 			finalPrice = product.CalculatePrice("H", now)
 			if finalPrice == 0 {
@@ -199,13 +199,13 @@ func (s *OrderService) CreateOrder(
 }
 func (s *OrderService) GetUserOrders(userID uint) ([]dto.OrderResponse, error) {
 	if userID == 0 {
-		s.logger.Printf("GetUserOrders failed: invalid userID=0")
+		s.logger.Warn("GetUserOrders failed: invalid userID", "user_id", 0)
 		return nil, errors.New("invalid user id")
 	}
 
 	orders, err := s.orderRepo.GetOrdersByUserID(userID)
 	if err != nil {
-		s.logger.Printf("GetUserOrders failed: repo error userID=%d err=%v", userID, err)
+		s.logger.Error("GetUserOrders failed: repo error", "user_id", userID, "error", err)
 		return nil, err
 	}
 
@@ -276,27 +276,18 @@ func (s *OrderService) GetUserOrders(userID uint) ([]dto.OrderResponse, error) {
 
 func (s *OrderService) GetOrder(userID uint, orderID uint) (*domain.Order, error) {
 	if userID == 0 || orderID == 0 {
-		s.logger.Printf(
-			"GetOrder failed: invalid input userID=%d orderID=%d",
-			userID, orderID,
-		)
+		s.logger.Warn("GetOrder failed: invalid input", "user_id", userID, "order_id", orderID)
 		return nil, ErrInvalidInput
 	}
 
 	order, err := s.orderRepo.GetByID(orderID)
 	if err != nil {
-		s.logger.Printf(
-			"GetOrder failed: order not found orderID=%d err=%v",
-			orderID, err,
-		)
+		s.logger.Error("GetOrder failed: order not found", "order_id", orderID, "error", err)
 		return nil, err
 	}
 
 	if order.UserID != userID {
-		s.logger.Printf(
-			"GetOrder forbidden: userID=%d orderID=%d ownerID=%d",
-			userID, orderID, order.UserID,
-		)
+		s.logger.Warn("GetOrder forbidden", "user_id", userID, "order_id", orderID, "owner_id", order.UserID)
 		return nil, ErrForbidden
 	}
 
@@ -305,36 +296,24 @@ func (s *OrderService) GetOrder(userID uint, orderID uint) (*domain.Order, error
 
 func (s *OrderService) CancelOrder(userID uint, orderID uint) error {
 	if userID == 0 || orderID == 0 {
-		s.logger.Printf(
-			"CancelOrder failed: invalid input userID=%d orderID=%d",
-			userID, orderID,
-		)
+		s.logger.Warn("CancelOrder failed: invalid input", "user_id", userID, "order_id", orderID)
 		return ErrInvalidInput
 	}
 
 	// 👇 IMPORTANT: preload items
 	order, err := s.orderRepo.GetByIDWithItems(orderID)
 	if err != nil {
-		s.logger.Printf(
-			"CancelOrder failed: order not found orderID=%d err=%v",
-			orderID, err,
-		)
+		s.logger.Error("CancelOrder failed: order not found", "order_id", orderID, "error", err)
 		return err
 	}
 
 	if order.UserID != userID {
-		s.logger.Printf(
-			"CancelOrder forbidden: userID=%d orderID=%d ownerID=%d",
-			userID, orderID, order.UserID,
-		)
+		s.logger.Warn("CancelOrder forbidden", "user_id", userID, "order_id", orderID, "owner_id", order.UserID)
 		return ErrForbidden
 	}
 
 	if order.Status != domain.OrderStatusPending {
-		s.logger.Printf(
-			"CancelOrder failed: invalid status orderID=%d status=%s",
-			orderID, order.Status,
-		)
+		s.logger.Warn("CancelOrder failed: invalid status", "order_id", orderID, "status", order.Status)
 		return ErrOrderNotCancelable
 	}
 
@@ -348,19 +327,15 @@ func (s *OrderService) CancelOrder(userID uint, orderID uint) error {
 
 	// ✅ save everything
 	if err := s.orderRepo.SaveOrderWithItems(order); err != nil {
-		s.logger.Printf(
-			"CancelOrder failed: save error orderID=%d err=%v",
-			orderID, err,
-		)
+		s.logger.Error("CancelOrder failed: save error", "order_id", orderID, "error", err)
 		return err
 	}
 
 	// ✅ trigger refund for online payments (Razorpay/Stripe) - RefundPayment checks Payment.Status internally
 	if order.PaymentMethod != domain.PaymentMethodCOD && s.paymentSvc != nil {
 		if err := s.paymentSvc.RefundPayment(orderID); err != nil {
-			s.logger.Printf(
-				"CancelOrder: refund failed orderID=%d err=%v",
-				orderID, err,
+			s.logger.Error("CancelOrder: refund failed",
+				"order_id", orderID, "error", err,
 			)
 		}
 	}
@@ -368,11 +343,10 @@ func (s *OrderService) CancelOrder(userID uint, orderID uint) error {
 	return nil
 }
 
-
 func (s *OrderService) ListAllOrders() ([]domain.Order, error) {
 	orders, err := s.orderRepo.ListAll()
 	if err != nil {
-		s.logger.Printf("ListAllOrders failed: err=%v", err)
+		s.logger.Error("ListAllOrders failed", "error", err)
 		return nil, err
 	}
 	return orders, nil
@@ -380,15 +354,12 @@ func (s *OrderService) ListAllOrders() ([]domain.Order, error) {
 
 func (s *OrderService) UpdateOrderStatus(orderID uint, status domain.OrderStatus) error {
 	if orderID == 0 {
-		s.logger.Printf("UpdateOrderStatus failed: invalid orderID=0")
+		s.logger.Warn("UpdateOrderStatus failed: invalid orderID", "order_id", 0)
 		return ErrInvalidInput
 	}
 
 	if !domain.IsValidOrderStatus(status) {
-		s.logger.Printf(
-			"UpdateOrderStatus failed: invalid status orderID=%d status=%s",
-			orderID, status,
-		)
+		s.logger.Warn("UpdateOrderStatus failed: invalid status", "order_id", orderID, "status", status)
 		return ErrInvalidOrderStatus
 	}
 
@@ -397,7 +368,7 @@ func (s *OrderService) UpdateOrderStatus(orderID uint, status domain.OrderStatus
 		order, err := s.orderRepo.GetByID(orderID)
 		if err == nil && order.PaymentMethod == domain.PaymentMethodRazorpay && order.PaymentStatus == domain.PaymentStatusPaid {
 			if err := s.paymentSvc.RefundPayment(orderID); err == nil {
-				s.logger.Printf("UpdateOrderStatus: auto-refunded Razorpay order orderID=%d", orderID)
+				s.logger.Info("UpdateOrderStatus: auto-refunded Razorpay order", "order_id", orderID)
 				return nil // RefundPayment already updated order status to "refunded"
 			}
 			// Refund failed (e.g. already refunded); fall through to UpdateStatus
@@ -426,7 +397,7 @@ func (s *OrderService) CancelOrderItem(
 		return ErrNotFound
 	}
 
-	s.logger.Println("Order User:", order.UserID, "Request User:", userID)
+	s.logger.Debug("CancelOrderItem: ownership check", "order_user_id", order.UserID, "request_user_id", userID)
 
 	if order.UserID != userID {
 		tx.Rollback()
@@ -445,7 +416,7 @@ func (s *OrderService) CancelOrderItem(
 		return ErrNotFound
 	}
 
-	s.logger.Println("Item Status:", item.Status)
+	s.logger.Debug("CancelOrderItem: item status check", "item_id", itemID, "status", item.Status)
 
 	if !item.CanBeCancelled() {
 		tx.Rollback()
@@ -634,7 +605,7 @@ func (s *OrderService) CreateDirectOrder(
 			} else {
 				unitPrice = price
 			}
-			
+
 			finalPrice = product.CalculatePrice("H", now)
 			if finalPrice == 0 {
 				finalPrice = unitPrice
@@ -697,5 +668,5 @@ func (s *OrderService) CreateDirectOrder(
 }
 
 func (s *OrderService) GetOrderByID(orderID uint) (*domain.Order, error) {
-    return s.orderRepo.GetByID(orderID) // already preloads ShippingAddress ✅
+	return s.orderRepo.GetByID(orderID) // already preloads ShippingAddress ✅
 }

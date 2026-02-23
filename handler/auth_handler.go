@@ -29,7 +29,7 @@ func (h *AuthHandler) Signup(c *fiber.Ctx) error {
 		Password string `json:"password" validate:"required,min=6"`
 	}
 	if err := c.BodyParser(&req); err != nil {
-		logging.LogWarn("signup body parse failed", c, err)
+		logging.LogWarn("signup body parse failed", "error", err)
 		return HandleError(c, service.ErrInvalidInput.WithContext("parsing signup request"))
 	}
 
@@ -46,11 +46,11 @@ func (h *AuthHandler) Signup(c *fiber.Ctx) error {
 	}
 
 	if err := h.authSvc.Signup(user); err != nil {
-		logging.LogWarn("signup failed", c, err, "email", req.Email)
+		logging.LogWarn("signup failed", "error", err, "email", req.Email)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("signup successful", c, "email", req.Email)
+	logging.LogInfo("signup successful", "email", req.Email)
 	return c.JSON(fiber.Map{"message": "OTP has been sent"})
 }
 
@@ -61,7 +61,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		Password string `json:"password" validate:"required"`
 	}
 	if err := c.BodyParser(&req); err != nil {
-		logging.LogWarn("login body parse failed", c, err)
+		logging.LogWarn("login body parse failed", "error", err)
 		return HandleError(c, service.ErrInvalidInput)
 	}
 	if err := validator.Validate.Struct(req); err != nil {
@@ -72,7 +72,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 	user, accessToken, refreshToken, err := h.authSvc.Login(req.Email, req.Password)
 	if err != nil {
-		logging.LogWarn("login failed", c, err, "email", req.Email)
+		logging.LogWarn("login failed", "error", err, "email", req.Email)
 		return HandleError(c, err)
 	}
 
@@ -87,7 +87,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		Domain:    "",
 	})
 
-	logging.LogInfo("login successful", c, "userID", user.ID)
+	logging.LogInfo("login successful", "userID", user.ID)
 
 	return c.JSON(fiber.Map{
 		"message":      "login successful",
@@ -108,13 +108,13 @@ func (h *AuthHandler) RefreshToken(c *fiber.Ctx) error {
 	refreshToken := c.Cookies("refresh_token")
 	fmt.Println("referesh",refreshToken)
 	if refreshToken == "" {
-		logging.LogWarn("missing refresh token cookie", c, fiber.ErrUnauthorized)
+		logging.LogWarn("missing refresh token cookie")
 		return HandleError(c, service.ErrUnauthorized)
 	}
 
 	accessToken, newRefreshToken, err := h.authSvc.RefreshToken(refreshToken)
 	if err != nil {
-		logging.LogWarn("refresh token failed", c, err)
+		logging.LogWarn("refresh token failed", "error", err)
 		return HandleError(c, err)
 	}
 
@@ -149,7 +149,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&req); err != nil {
-		logging.LogWarn("change password failed: body parse", c, err, "userID", userID)
+		logging.LogWarn("change password failed: body parse", "error", err, "userID", userID)
 		return HandleError(c, service.ErrInvalidInput)
 	}
 	if err:= validator.Validate.Struct(req);err!=nil{
@@ -160,11 +160,11 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 
 
 	if err := h.authSvc.ChangePassword(userID, req.CurrentPassword, req.NewPassword); err != nil {
-		logging.LogWarn("change password failed: service error,auth,Svc problem", c, err, "userID", userID)
+		logging.LogWarn("change password failed: service error,auth,Svc problem", "error", err, "userID", userID)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("password changed successfully", c, "userID", userID)
+	logging.LogInfo("password changed successfully", "userID", userID)
 	return c.JSON(fiber.Map{"message": "Password changed successfully"})
 }
 
@@ -176,7 +176,7 @@ func (h *AuthHandler) ForgotPassword(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&req); err != nil {
-        logging.LogWarn("forgot password failed: body parse", c, err)
+        logging.LogWarn("forgot password failed: body parse", "error", err)
 		return HandleError(c, service.ErrInvalidInput)
 	}
 	if err:= validator.Validate.Struct(req);err!=nil{
@@ -188,7 +188,7 @@ func (h *AuthHandler) ForgotPassword(c *fiber.Ctx) error {
 
 	err := h.authSvc.ForgotPassword(req.Email)
 	if err != nil {
-		logging.LogWarn("forgot password failed: service error,auth,Svc problem", c, err)	
+		logging.LogWarn("forgot password failed: service error,auth,Svc problem", "error", err)	
 		return HandleError(c, err)
 	}
 
@@ -206,7 +206,7 @@ func (h *AuthHandler) VerifyOTP(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&req); err != nil {
-		logging.LogWarn("verify OTP failed: body parse", c, err)
+		logging.LogWarn("verify OTP failed: body parse", "error", err)
 		return HandleError(c, service.ErrInvalidInput.WithContext("parsing OTP verification request"))
 	}
 
@@ -217,11 +217,11 @@ func (h *AuthHandler) VerifyOTP(c *fiber.Ctx) error {
 	}
 
 	if err := h.authSvc.VerifyOTP(req.Email, req.OTP); err != nil {
-		logging.LogWarn("verify OTP failed: service error", c, err, "email", req.Email)
+		logging.LogWarn("verify OTP failed: service error", "error", err, "email", req.Email)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("OTP verified successfully", c, "email", req.Email)
+	logging.LogInfo("OTP verified successfully", "email", req.Email)
 	return c.JSON(fiber.Map{"message": "Account verified successfully"})
 }
 
@@ -234,7 +234,7 @@ func (h *AuthHandler) ResetPasswordWithOTP(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&req); err != nil {
-		logging.LogWarn("reset password with OTP failed: body parse", c, err)
+		logging.LogWarn("reset password with OTP failed: body parse", "error", err)
 		return HandleError(c, service.ErrInvalidInput.WithContext("parsing reset password request"))
 	}
 
@@ -246,11 +246,11 @@ func (h *AuthHandler) ResetPasswordWithOTP(c *fiber.Ctx) error {
 
 
 	if err := h.authSvc.ResetPassword(req.Email, req.OTP, req.NewPassword); err != nil {
-		logging.LogWarn("reset password with OTP failed: service error", c, err, "email", req.Email)
+		logging.LogWarn("reset password with OTP failed: service error", "error", err, "email", req.Email)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("password reset successfully via OTP", c, "email", req.Email)
+	logging.LogInfo("password reset successfully via OTP", "email", req.Email)
 	return c.JSON(fiber.Map{"message": "Password reset successfully"})
 }
 
@@ -262,13 +262,13 @@ func (h *AuthHandler) ResendVerification(c *fiber.Ctx) error {
 
 	var body request
 	if err := c.BodyParser(&body); err != nil {
-		logging.LogWarn("resend verification failed: body parse", c, err)
+		logging.LogWarn("resend verification failed: body parse", "error", err)
 		return fiber.ErrBadRequest
 	}
 
 	err := h.authSvc.ResendVerificationEmail(body.Email)
 	if err != nil {
-		logging.LogWarn("resend verification failed: service error", c, err, "email", body.Email)
+		logging.LogWarn("resend verification failed: service error", "error", err, "email", body.Email)
 
 		if se, ok := err.(*service.ServiceError); ok {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -277,11 +277,11 @@ func (h *AuthHandler) ResendVerification(c *fiber.Ctx) error {
 			})
 		}
 
-		logging.LogWarn("resend verification: unexpected error", c, err, "email", body.Email)
+		logging.LogWarn("resend verification: unexpected error", "error", err, "email", body.Email)
 		return fiber.ErrInternalServerError
 	}
 
-	logging.LogInfo("resend verification succeeded", c, "email", body.Email)
+	logging.LogInfo("resend verification succeeded", "email", body.Email)
 
 	return c.JSON(fiber.Map{
 		"msg": "Verification OTP resent successfully",
@@ -320,6 +320,6 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
         Path:     "/",
     })
     
-    logging.LogInfo("user logged out", c)
+    logging.LogInfo("user logged out")
     return c.JSON(fiber.Map{"message": "logged out"})
 }

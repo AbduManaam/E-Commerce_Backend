@@ -1,5 +1,3 @@
-
-
 package app
 
 import (
@@ -27,7 +25,7 @@ func NewServer(cfg *config.AppConfig) (*Server, func() error) {
 	// Build the container
 	container, err := BuildContainer(cfg)
 	if err != nil {
-		logging.Logger.Error("server container build failed", "error", err.Error())
+		logging.LogError("server container build failed", "error", err.Error())
 		os.Exit(1)
 	}
 
@@ -42,16 +40,12 @@ func NewServer(cfg *config.AppConfig) (*Server, func() error) {
 	})
 
 	app.Use(middleware.CORSMiddleware())
-	
-	app.Use(middleware.RecoveryMiddleware())
-	
-	
-	if cfg.Environment == "development" {
-		app.Use(middleware.DebugLogger())
-	} else {
-		app.Use(middleware.RequestLogger())
-	}
 
+	app.Use(middleware.RecoveryMiddleware())
+
+	// Single consolidated request logger for all environments.
+	// Dev vs prod differentiation happens at the logger output level (text vs JSON).
+	app.Use(middleware.RequestLogger())
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
@@ -90,15 +84,12 @@ func NewServer(cfg *config.AppConfig) (*Server, func() error) {
 		WishlistHandler:  container.WishlistHandler,
 		AddressHandler:   container.AddressHandler,
 		PaymentHandler:   container.PaymentHandler,
-		HomeHandler: container.HomeHandler,
-
+		HomeHandler:      container.HomeHandler,
 	}
 
 	routes.SetUpRoutes(app, deps)
 
-	logging.LogInfo(
-		"server initialized",
-		nil,
+	logging.LogInfo("server initialized",
 		"host", cfg.Server.Host,
 		"port", cfg.Server.Port,
 		"environment", cfg.Environment,
@@ -115,9 +106,9 @@ func (s *Server) Run() error {
 	addr := fmt.Sprintf("%s:%d", s.cfg.Server.Host, s.cfg.Server.Port)
 
 	go func() {
-		logging.LogInfo("server starting", nil, "addr", addr)
+		logging.LogInfo("server starting", "addr", addr)
 		if err := s.app.Listen(addr); err != nil {
-			logging.LogWarn("server failed to start", nil, err, "addr", addr)
+			logging.LogError("server failed to start", "error", err.Error(), "addr", addr)
 			os.Exit(1)
 		}
 	}()
@@ -126,21 +117,21 @@ func (s *Server) Run() error {
 	signal.Notify(quit, os.Interrupt)
 	<-quit
 
-	logging.LogInfo("server shutting down...", nil)
+	logging.LogInfo("server shutting down...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := s.app.ShutdownWithContext(ctx); err != nil {
-		logging.LogWarn("server shutdown error", nil, err)
+		logging.LogError("server shutdown error", "error", err.Error())
 	}
 
 	if err := s.cleanup(); err != nil {
-		logging.LogWarn("cleanup failed", nil, err)
+		logging.LogError("cleanup failed", "error", err.Error())
 	} else {
-		logging.LogInfo("cleanup finished successfully", nil)
+		logging.LogInfo("cleanup finished successfully")
 	}
 
-	logging.LogInfo("server stopped gracefully", nil)
+	logging.LogInfo("server stopped gracefully")
 	return nil
 }

@@ -2,167 +2,107 @@ package middleware
 
 import (
 	"backend/utils/logging"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-// RequestLogger middleware that uses your existing logging system
+var sensitiveHeaders = map[string]bool{
+	"Authorization": true,
+	"Cookie":        true,
+	"Set-Cookie":    true,
+	"X-Api-Key":     true,
+}
+
+var skipPaths = map[string]bool{
+	"/health":      true,
+	"/favicon.ico": true,
+	"/test-cors":   true,
+}
+
+
 func RequestLogger() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Skip logging for health checks and favicon to reduce noise
+		// Skip noisy endpoints
 		path := c.Path()
-		if path == "/health" || path == "/favicon.ico" || path == "/test-cors" {
+		if skipPaths[path] {
 			return c.Next()
 		}
 
-		// Start timer
+		// --- Request ID ---
+		requestID := c.Get("X-Request-ID")
+		if requestID == "" {
+			requestID = logging.GenerateRequestID()
+		}
+		c.Locals(logging.RequestIDKey, requestID)
+		c.Set("X-Request-ID", requestID)
+
+		// --- Timer ---
 		start := time.Now()
-		
-		// Get request details
-		ip := c.IP()
-		method := c.Method()
-		userAgent := c.Get("User-Agent")
-		referer := c.Get("Referer")
-		
-		// Extract user ID if available
+
+		// --- Process request ---
+		chainErr := c.Next()
+
+		// --- Collect response data ---
+		duration := time.Since(start)
+		status := c.Response().StatusCode()
+
+		// Extract user context (set by auth middleware)
 		userID := "anonymous"
-		if id := c.Locals("userID"); id != nil {
+		if id := c.Locals(logging.UserIDKey); id != nil {
 			if uid, ok := id.(uint); ok && uid > 0 {
-				userID = string(rune(uid))
+				userID = fmt.Sprintf("%d", uid)
 			}
 		}
-		
-		// Extract role if available
+
 		role := "guest"
-		if r := c.Locals("role"); r != nil {
-			if roleStr, ok := r.(string); ok {
+		if r := c.Locals(logging.RoleKey); r != nil {
+			if roleStr, ok := r.(string); ok && roleStr != "" {
 				role = roleStr
 			}
 		}
-		
-		// Process the request
-		chainErr := c.Next()
-		
-		// Calculate request duration
-		duration := time.Since(start)
-		
-		// Get response details
-		status := c.Response().StatusCode()
-		contentLength := c.Response().Header.ContentLength()
-		
-		// Prepare log fields
-		logFields := []interface{}{
-			"method", method,
+
+		// --- Build log fields ---
+		fields := []any{
+			"request_id", requestID,
+			"method", c.Method(),
 			"path", path,
 			"status", status,
-			"ip", ip,
 			"duration_ms", duration.Milliseconds(),
-			"bytes", contentLength,
+			"ip", c.IP(),
 			"user_id", userID,
 			"role", role,
+			"bytes", c.Response().Header.ContentLength(),
 		}
-		
-		// Add optional fields if they exist
-		if userAgent != "" {
-			logFields = append(logFields, "user_agent", truncate(userAgent, 100))
-		}
-		if referer != "" {
-			logFields = append(logFields, "referer", referer)
-		}
-		
-		// Add query params for GET requests
-		if method == "GET" && c.OriginalURL() != "" && strings.Contains(c.OriginalURL(), "?") {
-			// Just log that there were query params, not the actual values (for privacy)
-			logFields = append(logFields, "has_query", true)
-		}
-		
-		// Log based on status code and error
+
+		// Add error info if present
 		if chainErr != nil {
-			// If there's an error in the chain, log it as error
-			logFields = append(logFields, "chain_error", chainErr.Error())
-			logging.LogWarn("request chain error", c, chainErr, logFields...)
-		} else if status >= 500 {
-			// Server errors
-			logging.LogWarn("server error", c, nil, logFields...)
-		} else if status >= 400 {
-			// Client errors (except 401/403 which might be expected)
-			if status != 401 && status != 403 {
-				logging.LogWarn("client error", c, nil, logFields...)
-			} else {
-				logging.LogInfo("request completed", c, logFields...)
-			}
-		} else {
-			// Successful requests
-			logging.LogInfo("request completed", c, logFields...)
+			fields = append(fields, "error", chainErr.Error())
 		}
-		
+
+		switch {
+		case chainErr != nil || status >= 500:
+			logging.LogError("request completed", fields...)
+		case status >= 400 && status != 401 && status != 403:
+			logging.LogWarn("request completed", fields...)
+		default:
+			logging.LogInfo("request completed", fields...)
+		}
+
 		return chainErr
 	}
 }
 
-// Helper function to truncate long strings
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
-
-func APILogger() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-
-		path := c.Path()
-		if !strings.HasPrefix(path, "/api/") && 
-		   !strings.HasPrefix(path, "/auth/") && 
-		   !strings.HasPrefix(path, "/user/") && 
-		   !strings.HasPrefix(path, "/admin/") {
-			return c.Next()
+func maskHeaders(headers map[string][]string) map[string]string {
+	masked := make(map[string]string, len(headers))
+	for k, v := range headers {
+		if sensitiveHeaders[strings.Title(k)] {
+			masked[k] = "[REDACTED]"
+		} else if len(v) > 0 {
+			masked[k] = v[0]
 		}
-		
-		start := time.Now()
-		err := c.Next()
-		duration := time.Since(start)
-		
-		logging.LogInfo("api request", c,
-			"method", c.Method(),
-			"path", path,
-			"status", c.Response().StatusCode(),
-			"duration_ms", duration.Milliseconds(),
-			"ip", c.IP(),
-		)
-		
-		return err
 	}
-}
-
-func DebugLogger() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		start := time.Now()
-		
-		// Log request details
-		logging.LogInfo("request started", c,
-			"method", c.Method(),
-			"path", c.Path(),
-			"ip", c.IP(),
-			"headers", c.GetReqHeaders(),
-			"query", c.Queries(),
-		)
-		
-		err := c.Next()
-		duration := time.Since(start)
-		
-		// Log response details
-		logging.LogInfo("request completed", c,
-			"method", c.Method(),
-			"path", c.Path(),
-			"status", c.Response().StatusCode(),
-			"duration_ms", duration.Milliseconds(),
-			"response_headers", c.GetRespHeaders(),
-			"error", err,
-		)
-		
-		return err
-	}
+	return masked
 }

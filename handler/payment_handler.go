@@ -53,17 +53,17 @@ func (h *PaymentHandler) CreatePaymentIntent(c *fiber.Ctx) error {
 func (h *PaymentHandler) ConfirmPayment(c *fiber.Ctx) error {
     var req dto.ConfirmPaymentRequest
     if err := c.BodyParser(&req); err != nil {
-        logging.LogWarn("invalid request body", c, err)
+        logging.LogWarn("invalid request body", "error", err)
         return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
     }
 
     payment, err := h.paymentSvc.ConfirmPayment(req.PaymentID, req.Status)
     if err != nil {
-        logging.LogWarn("failed to confirm payment", c, err)
+        logging.LogWarn("failed to confirm payment", "error", err)
         return c.Status(400).JSON(fiber.Map{"error": err.Error()})
     }
 
-    logging.LogInfo("payment confirmed successfully", c, "payment_id", payment.GatewayID, "status", payment.Status)
+    logging.LogInfo("payment confirmed successfully", "payment_id", payment.GatewayID, "status", payment.Status)
 
     res := dto.ConfirmPaymentResponse{
         PaymentID: payment.GatewayID,
@@ -84,20 +84,20 @@ func (h *PaymentHandler) RefundPayment(c *fiber.Ctx) error {
     orderIDParam := c.Params("order_id")
     orderID, err := strconv.ParseUint(orderIDParam, 10, 64)
     if err != nil {
-        logging.LogWarn("RefundPayment: invalid order_id", c, err)
+        logging.LogWarn("RefundPayment: invalid order_id", "error", err)
         return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
             "error": "invalid order_id",
         })
     }
 
     if err := h.paymentSvc.RefundPayment(uint(orderID)); err != nil {
-        logging.LogWarn("RefundPayment: failed", c, err, "orderID", orderID)
+        logging.LogWarn("RefundPayment: failed", "error", err, "orderID", orderID)
         return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
             "error": err.Error(),
         })
     }
 
-    logging.LogInfo("RefundPayment: success", c, "orderID", orderID)
+    logging.LogInfo("RefundPayment: success", "orderID", orderID)
     return c.JSON(fiber.Map{
         "message": "Refund processed successfully",
     })

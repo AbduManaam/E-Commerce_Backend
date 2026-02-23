@@ -21,7 +21,7 @@ func NewOrderHandler(orderSvc *service.OrderService) *OrderHandler {
 }
 
 func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
-    logging.LogInfo("CreateOrder endpoint hit", c, 
+    logging.LogInfo("CreateOrder endpoint hit", 
         "path", c.Path(),
         "method", c.Method(),
     )
@@ -34,7 +34,7 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 
     var req dto.CreateOrderRequest
     if err := c.BodyParser(&req); err != nil {
-        logging.LogWarn("invalid create order request: body parse failed", c, err, 
+        logging.LogWarn("invalid create order request: body parse failed", "error", err, 
             "userID", userID, 
             "body", string(c.Body()),
         )
@@ -59,7 +59,7 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 
     if req.OrderType == "cart" {
 
-		logging.LogInfo("creating cart-based order", c, "userID", userID)
+		logging.LogInfo("creating cart-based order", "userID", userID)
         order, err = h.orderSvc.CreateOrderFromCart(
             userID,
             req.AddressID,
@@ -67,7 +67,7 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
         )
     } else if req.OrderType == "direct" {
         // Direct order (items specified in request)
-        logging.LogInfo("creating direct order", c, "userID", userID, "items_count", len(req.Items))
+        logging.LogInfo("creating direct order", "userID", userID, "items_count", len(req.Items))
         order, err = h.orderSvc.CreateDirectOrder(
             userID,
             req.AddressID,
@@ -77,11 +77,11 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
     }
 
     if err != nil {
-        logging.LogWarn("create order failed", c, err, "userID", userID, "order_type", req.OrderType)
+        logging.LogWarn("create order failed", "error", err, "userID", userID, "order_type", req.OrderType)
         return HandleError(c, err)
     }
 
-    logging.LogInfo("order created successfully", c, 
+    logging.LogInfo("order created successfully", 
         "userID", userID, 
         "orderID", order.ID,
         "order_type", req.OrderType,
@@ -99,17 +99,17 @@ func (h *OrderHandler) GetUserOrders(c *fiber.Ctx) error {
 	userIDAny := c.Locals("userID")
 	userID, ok := userIDAny.(uint)
 	if !ok {
-		logging.LogWarn("unauthorized get user orders attempt", c, fiber.ErrUnauthorized)
+		logging.LogWarn("unauthorized get user orders attempt")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 	}
 
 	orders, err := h.orderSvc.GetUserOrders(userID)
 	if err != nil {
-		logging.LogWarn("get user orders failed", c, err, "userID", userID)
+		logging.LogWarn("get user orders failed", "error", err, "userID", userID)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("user orders retrieved successfully", c, "userID", userID, "ordersCount", len(orders))
+	logging.LogInfo("user orders retrieved successfully", "userID", userID, "ordersCount", len(orders))
 	return c.JSON(orders)
 }
 
@@ -117,24 +117,24 @@ func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
 	userIDAny := c.Locals("userID")
 	userID, ok := userIDAny.(uint)
 	if !ok {
-		logging.LogWarn("unauthorized get order attempt", c, fiber.ErrUnauthorized)
+		logging.LogWarn("unauthorized get order attempt")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 	}
 
 	idParam := c.Params("id")
 	orderID, err := strconv.ParseUint(idParam, 10, 64)
 	if err != nil {
-		logging.LogWarn("get order failed: invalid order ID", c, err, "userID", userID, "orderIDParam", idParam)
+		logging.LogWarn("get order failed: invalid order ID", "error", err, "userID", userID, "orderIDParam", idParam)
 		return HandleError(c, service.ErrInvalidInput)
 	}
 
 	order, err := h.orderSvc.GetOrder(userID, uint(orderID))
 	if err != nil {
-		logging.LogWarn("get order failed: service error", c, err, "userID", userID, "orderID", orderID)
+		logging.LogWarn("get order failed: service error", "error", err, "userID", userID, "orderID", orderID)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("order retrieved successfully", c, "userID", userID, "orderID", orderID)
+	logging.LogInfo("order retrieved successfully", "userID", userID, "orderID", orderID)
 	return c.JSON(order)
 }
 
@@ -142,24 +142,24 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 	userIDAny := c.Locals("userID")
 	userID, ok := userIDAny.(uint)
 	if !ok {
-		logging.LogWarn("unauthorized cancel order attempt", c, fiber.ErrUnauthorized)
+		logging.LogWarn("unauthorized cancel order attempt")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 	}
 
 	idParam := c.Params("id")
 	orderID, err := strconv.ParseUint(idParam, 10, 64)
 	if err != nil {
-		logging.LogWarn("cancel order failed: invalid order ID", c, err, "userID", userID, "orderIDParam", idParam)
+		logging.LogWarn("cancel order failed: invalid order ID", "error", err, "userID", userID, "orderIDParam", idParam)
 		return HandleError(c, service.ErrInvalidInput)
 	}
 
 	err = h.orderSvc.CancelOrder(userID, uint(orderID))
 	if err != nil {
-		logging.LogWarn("cancel order failed: service error", c, err, "userID", userID, "orderID", orderID)
+		logging.LogWarn("cancel order failed: service error", "error", err, "userID", userID, "orderID", orderID)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("order cancelled successfully", c, "userID", userID, "orderID", orderID)
+	logging.LogInfo("order cancelled successfully", "userID", userID, "orderID", orderID)
 	return c.JSON(fiber.Map{"message": "Order cancelled successfully"})
 }
 
@@ -167,11 +167,11 @@ func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
 func (h *OrderHandler) ListAllOrders(c *fiber.Ctx) error {
 	orders, err := h.orderSvc.ListAllOrders()
 	if err != nil {
-		logging.LogWarn("list all orders failed: service error", c, err)
+		logging.LogWarn("list all orders failed: service error", "error", err)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("all orders retrieved successfully", c, "ordersCount", len(orders))
+	logging.LogInfo("all orders retrieved successfully", "ordersCount", len(orders))
 	return c.JSON(orders)
 }
 
@@ -179,7 +179,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	orderID, err := strconv.ParseUint(idParam, 10, 64)
 	if err != nil {
-		logging.LogWarn("update order status failed: invalid order ID", c, err)
+		logging.LogWarn("update order status failed: invalid order ID", "error", err)
 		return HandleError(c, service.ErrInvalidInput)
 	}
 
@@ -187,28 +187,28 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 		Status string `json:"status" validate:"required,oneof=pending confirmed shipped delivered cancelled refunded"`
 	}
 	if err := c.BodyParser(&req); err != nil {
-		logging.LogWarn("update order status failed: body parse", c, err, "orderID", orderID)
+		logging.LogWarn("update order status failed: body parse", "error", err, "orderID", orderID)
 		return HandleError(c, service.ErrInvalidInput)
 	}
 
 	if err := validator.Validate.Struct(req); err != nil {
-		logging.LogWarn("update order status failed: validation error", c, err, "orderID", orderID)
+		logging.LogWarn("update order status failed: validation error", "error", err, "orderID", orderID)
 		return c.Status(400).JSON(fiber.Map{"errors": validator.FormatErrors(err)})
 	}
 
 	if err := h.orderSvc.UpdateOrderStatus(uint(orderID), domain.OrderStatus(req.Status)); err != nil {
-		logging.LogWarn("update order status failed: service error", c, err, "orderID", orderID)
+		logging.LogWarn("update order status failed: service error", "error", err, "orderID", orderID)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("order status updated successfully", c, "orderID", orderID, "status", req.Status)
+	logging.LogInfo("order status updated successfully", "orderID", orderID, "status", req.Status)
 	return c.JSON(fiber.Map{"message": "Order status updated successfully"})
 }
 
 func (h *OrderHandler) AdminUpdateOrder(c *fiber.Ctx) error {
 	orderID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
-		logging.LogWarn("admin update order failed: invalid order ID", c, err)
+		logging.LogWarn("admin update order failed: invalid order ID", "error", err)
 		return HandleError(c, service.ErrInvalidInput)
 	}
 
@@ -217,21 +217,21 @@ func (h *OrderHandler) AdminUpdateOrder(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&req); err != nil {
-		logging.LogWarn("admin update order failed: body parse", c, err, "orderID", orderID)
+		logging.LogWarn("admin update order failed: body parse", "error", err, "orderID", orderID)
 		return HandleError(c, service.ErrInvalidInput)
 	}
 
 	if !domain.IsValidOrderStatus(req.Status) {
-		logging.LogWarn("admin update order failed: invalid order status", c, nil, "orderID", orderID, "status", req.Status)
+		logging.LogWarn("admin update order failed: invalid order status", "orderID", orderID, "status", req.Status)
 		return HandleError(c, service.ErrInvalidOrderStatus)
 	}
 
 	if err := h.orderSvc.UpdateOrderStatus(uint(orderID), req.Status); err != nil {
-		logging.LogWarn("admin update order failed: service error", c, err, "orderID", orderID)
+		logging.LogWarn("admin update order failed: service error", "error", err, "orderID", orderID)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("admin updated order successfully", c, "orderID", orderID, "status", req.Status)
+	logging.LogInfo("admin updated order successfully", "orderID", orderID, "status", req.Status)
 	return c.JSON(fiber.Map{"message": "order status updated successfully"})
 }
 

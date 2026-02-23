@@ -22,11 +22,11 @@ func (h *UserHandler) GetProfile(c *fiber.Ctx) error {
 
 	user, err := h.userSvc.GetProfile(userID)
 	if err != nil {
-		logging.LogWarn("get profile failed: service error", c, err, "userID", userID)
+		logging.LogWarn("get profile failed: service error", "error", err, "userID", userID)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("user profile retrieved successfully", c, "userID", userID)
+	logging.LogInfo("user profile retrieved successfully", "userID", userID)
 
 	resp := dto.UserResponse{
 		ID:    user.ID,
@@ -46,22 +46,22 @@ func (h *UserHandler) UpdateProfile(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&req); err != nil {
-		logging.LogWarn("update profile failed: body parse", c, err, "userID", userID)
+		logging.LogWarn("update profile failed: body parse", "error", err, "userID", userID)
 		return HandleError(c, service.ErrInvalidInput)
 	}
 
 	if err := validator.Validate.Struct(req); err != nil {
-		logging.LogWarn("update profile failed: validation error", c, err, "userID", userID)
+		logging.LogWarn("update profile failed: validation error", "error", err, "userID", userID)
 		return c.Status(400).JSON(fiber.Map{
 			"errors": validator.FormatErrors(err),
 		})
 	}
 
 	if err := h.userSvc.UpdateProfile(userID, req.Name); err != nil {
-		logging.LogWarn("update profile failed: service error", c, err, "userID", userID)
+		logging.LogWarn("update profile failed: service error", "error", err, "userID", userID)
 		return HandleError(c, err)
 	}
 
-	logging.LogInfo("user profile updated successfully", c, "userID", userID)
+	logging.LogInfo("user profile updated successfully", "userID", userID)
 	return c.JSON(fiber.Map{"message": "Profile updated successfully"})
 }

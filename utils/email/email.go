@@ -1,21 +1,18 @@
-
-
 package email
 
 import (
 	"fmt"
-	"log"
 	"net/smtp"
 
 	"backend/config"
+	"backend/utils/logging"
 )
 
 var smtpCfg config.SMTPConfig
 
-
 func Init(cfg config.SMTPConfig) {
 	smtpCfg = cfg
-	log.Printf("[email] SMTP initialized with host: %s, user: %s\n", smtpCfg.Host, smtpCfg.Username)
+	logging.LogInfo("SMTP initialized", "host", smtpCfg.Host)
 }
 
 func sendEmail(to, subject, body string) error {
@@ -25,8 +22,7 @@ func sendEmail(to, subject, body string) error {
 		fromHeader = from
 	}
 
-	log.Printf("[email] Attempting to send email from %s to %s via %s:%d", 
-		fromHeader, to, smtpCfg.Host, smtpCfg.Port)
+	logging.LogDebug("sending email", "to", to, "host", smtpCfg.Host)
 
 	msg := fmt.Sprintf(
 		"From: %s\r\n"+
@@ -40,23 +36,15 @@ func sendEmail(to, subject, body string) error {
 
 	addr := fmt.Sprintf("%s:%d", smtpCfg.Host, smtpCfg.Port)
 
-
-// 🔍 DEBUG — ADD HERE
-log.Println("[debug] SMTP USER:", smtpCfg.Username)
-log.Println("[debug] SMTP PASS EMPTY?:", smtpCfg.Password == "")
-log.Println("[debug] SMTP HOST:", smtpCfg.Host)
-log.Println("[debug] SMTP PORT:", smtpCfg.Port)
-
-
 	auth := smtp.PlainAuth("", smtpCfg.Username, smtpCfg.Password, smtpCfg.Host)
 
 	err := smtp.SendMail(addr, auth, from, []string{to}, []byte(msg))
 	if err != nil {
-		log.Printf("[email] Failed to send email to %s: %v\n", to, err)
+		logging.LogError("failed to send email", "to", to, "error", err)
 		return err
 	}
 
-	log.Printf("[email] Email sent successfully to %s\n", to)
+	logging.LogInfo("email sent successfully", "to", to)
 	return nil
 }
 
@@ -99,7 +87,7 @@ func SendPasswordResetOTP(to, name, otp string) error {
 // SendVerificationEmail sends email verification link (for backward compatibility)
 func SendVerificationEmail(to, name, token string) error {
 	verificationLink := fmt.Sprintf("http://localhost:8080/auth/verify-email?token=%s", token)
-	
+
 	body := fmt.Sprintf(
 		"Hello %s,\n\n"+
 			"Please verify your email address by clicking the link below:\n\n"+
@@ -114,7 +102,7 @@ func SendVerificationEmail(to, name, token string) error {
 // SendPasswordResetEmail sends password reset link (for backward compatibility)
 func SendPasswordResetEmail(to, name, token string) error {
 	resetLink := fmt.Sprintf("http://localhost:8080/auth/reset-password?token=%s", token)
-	
+
 	body := fmt.Sprintf(
 		"Hello %s,\n\n"+
 			"Reset your password using the link below (valid for 1 hour):\n\n"+

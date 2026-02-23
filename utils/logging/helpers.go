@@ -1,35 +1,21 @@
 package logging
 
-import "github.com/gofiber/fiber/v2"
-
-func LogWarn(msg string, c *fiber.Ctx, err error, extra ...any) {
-	fields := []any{
-		"error", err.Error(),
-	}
-
-	if c != nil {
-		fields = append(fields,
-			"path", c.Path(),
-			"method", c.Method(),
-			"ip", c.IP(),
-		)
-	}
-
-	fields = append(fields, extra...)
-	Logger.Warn(msg, fields...)
+// LogInfo logs an informational message with optional structured key-value fields.
+func LogInfo(msg string, fields ...any) {
+	GetLogger().Info(msg, fields...)
 }
 
-func LogInfo(msg string, c *fiber.Ctx, extra ...any) {
-	fields := []any{}
+// LogDebug logs a debug-level message with optional structured key-value fields.
+func LogDebug(msg string, fields ...any) {
+	GetLogger().Debug(msg, fields...)
+}
 
-	if c != nil {
-		fields = append(fields,
-			"path", c.Path(),
-			"method", c.Method(),
-			"ip", c.IP(),
-		)
-	}
+// LogWarn logs a warning message with optional structured key-value fields.
+func LogWarn(msg string, fields ...any) {
+	GetLogger().Warn(msg, fields...)
+}
 
-	fields = append(fields, extra...)
-	Logger.Info(msg, fields...)
+// LogError logs an error-level message with optional structured key-value fields.
+func LogError(msg string, fields ...any) {
+	GetLogger().Error(msg, fields...)
 }
