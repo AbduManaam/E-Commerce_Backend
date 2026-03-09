@@ -17,3 +17,5 @@ type UpdateProductRequest struct {
     OfferStart      *string  `json:"offer_start" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00"`
     OfferEnd        *string  `json:"offer_end" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00"`
 }
+
+

@@ -27,3 +27,4 @@ const (
 	MaxCartItems          = 20
 	MaxQuantityPerProduct = 10
 )
+
